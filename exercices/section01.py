@@ -1,25 +1,19 @@
-"""Section 1, atelier. Huit exercices courts, quarante minutes.
+"""Section 1, corrige commente.
 
-Completez les fonctions marquees TODO, puis lancez :
-
-    uv run pytest tests/test_section01.py -v
-
-Les enonces sont dans les docstrings. Vous n'avez pas besoin de revenir
-sur Notion pendant l'atelier.
-
-Regle de la section : aucun identifiant de modele dans ce fichier. Ils
-viennent tous de doc42/config.py, et un test le verifie.
+Les commentaires expliquent le pourquoi, pas le comment : le comment est
+dans le code.
 """
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from doc42.config import (  # noqa: F401
+from doc42.config import (
     MAX_TOKENS_DEFAUT,
     MODELE_DEFAUT,
     MODELE_PROFOND,
@@ -27,17 +21,15 @@ from doc42.config import (  # noqa: F401
     TARIFS,
 )
 from doc42.corpus import Document
-from doc42.outils import normaliser  # noqa: F401  (utile pour choisir_modele)
+from doc42.outils import normaliser
 
 # --- Donne : ne pas modifier -------------------------------------------------
 
-# Les trois paliers compares, du plus leger au plus capable.
 MODELES: tuple[str, ...] = (MODELE_RAPIDE, MODELE_DEFAUT, MODELE_PROFOND)
 
 QUESTION_PREMIER_APPEL = "Presente-toi en une phrase."
 CONSIGNE_RESUME = "Resume ce document en trois puces factuelles."
 CONSIGNE_RECLAMATION = "Ce message est-il une reclamation ? Reponds par oui ou non."
-# Bonus de l'atelier : le meme resume, avec une consigne de forme dans le systeme.
 SYSTEME_CONCIS = "Reponds en trois puces, sans introduction."
 
 
@@ -64,68 +56,72 @@ def consigne_reclamation(message: str) -> str:
     return f"{CONSIGNE_RECLAMATION}\n\nMessage : {message}"
 
 
-# --- Exercices ---------------------------------------------------------------
+# --- Corrige -----------------------------------------------------------------
+
+
+def _texte_de(reponse: Any) -> str:
+    # content[0].text suffirait aujourd'hui. On concatene quand meme : en
+    # section 4, une reponse peut commencer par un bloc tool_use, et l'index
+    # 0 tomberait sans bruit sur le mauvais bloc.
+    return "".join(bloc.text for bloc in reponse.content if bloc.type == "text")
 
 
 def diagnostiquer(
     environ: Mapping[str, str] | None = None,
     version: tuple[int, ...] = tuple(sys.version_info[:2]),
 ) -> list[str]:
-    """Liste les problemes d'environnement. Une liste vide veut dire : pret.
+    # L'environnement est injectable : un test qui lirait os.environ dirait
+    # "vert" chez le formateur et "rouge" chez le stagiaire.
+    environ = os.environ if environ is None else environ
+    problemes: list[str] = []
 
-    doc42.config.verifier() ne regarde que la presence de la cle. Vous allez
-    le completer, sans modifier config.py.
+    cle = environ.get("ANTHROPIC_API_KEY", "")
+    if not cle:
+        problemes.append(
+            "ANTHROPIC_API_KEY absente : copiez .env.example en .env et renseignez votre cle."
+        )
+    elif not cle.startswith("sk-ant-") or any(c in cle for c in " \"'"):
+        # On decrit le defaut, jamais la valeur : ce message finira dans un
+        # terminal partage ou un ticket, et une cle affichee est une cle a revoquer.
+        problemes.append(
+            "ANTHROPIC_API_KEY mal formee : elle doit commencer par sk-ant- "
+            "et ne contenir ni espace ni guillemet."
+        )
 
-    Attendu :
-      - `environ` vaut os.environ quand il est None ; le test injecte un
-        dictionnaire pour ne pas dependre de votre machine
-      - ANTHROPIC_API_KEY absente ou vide : un probleme qui contient
-        "ANTHROPIC_API_KEY"
-      - presente mais mal formee (ne commence pas par "sk-ant-", ou contient
-        un espace ou un guillemet, erreurs classiques de copier-coller) :
-        un probleme qui contient "ANTHROPIC_API_KEY"
-      - `version` inferieure a (3, 12) : un probleme qui contient "3.12"
-      - chacun des trois MODELES doit avoir un tarif dans TARIFS, sinon un
-        probleme qui nomme le modele
-      - JAMAIS la valeur de la cle dans un message : un diagnostic finit
-        dans un terminal partage, une capture d'ecran ou un ticket
-    """
-    # TODO
-    raise NotImplementedError
+    if tuple(version[:2]) < (3, 12):
+        problemes.append("Python 3.12+ requis pour le fil rouge Doc42.")
+
+    # Un modele sans tarif rendrait le tableau comparatif faux. Autant le
+    # savoir avant l'atelier qu'au milieu.
+    for modele in MODELES:
+        if modele not in TARIFS:
+            problemes.append(f"Pas de tarif pour {modele} dans doc42.config.TARIFS.")
+
+    return problemes
 
 
 def premier_appel(client: Any, question: str = QUESTION_PREMIER_APPEL) -> tuple[str, Any, str]:
-    """Le premier appel de la formation. Retourne (texte, usage, stop_reason).
-
-    Attendu :
-      - model et max_tokens viennent de doc42.config (MODELE_DEFAUT,
-        MAX_TOKENS_DEFAUT), jamais une chaine ecrite ici
-      - un seul message, role "user", contenu `question`
-      - usage est l'objet usage de la reponse, tel quel : vous le lirez a
-        voix haute (input_tokens, output_tokens)
-      - stop_reason vient de la reponse, ne le supposez pas : "max_tokens"
-        veut dire que la reponse a ete coupee
-
-    Piege : content[0].text fonctionne ici et cassera en section 4, quand
-    une reponse pourra commencer par un bloc d'outil. Prenez l'habitude de
-    concatener les blocs de type "text".
-    """
-    # TODO
-    raise NotImplementedError
+    # Le modele vient de config.py : le jour ou la gamme change, on modifie
+    # un fichier, pas dix.
+    reponse = client.messages.create(
+        model=MODELE_DEFAUT,
+        max_tokens=MAX_TOKENS_DEFAUT,
+        messages=[{"role": "user", "content": question}],
+    )
+    # usage des le premier appel : le reflexe de regarder ce que coute un
+    # appel s'installe maintenant ou jamais. stop_reason dit si la reponse
+    # est complete ("end_turn") ou coupee ("max_tokens").
+    return _texte_de(reponse), reponse.usage, reponse.stop_reason
 
 
 def cout_estime(modele: str, tokens_entree: int, tokens_sortie: int) -> float:
-    """Cout d'un appel, en dollars.
-
-    Attendu :
-      - les tarifs viennent de TARIFS : (entree, sortie) en dollars par
-        MILLION de tokens
-      - un modele absent de TARIFS leve ValueError avec un message qui dit
-        quoi faire (mettre a jour doc42.config), plutot qu'un cout de zero
-        qui fausserait le tableau sans bruit
-    """
-    # TODO
-    raise NotImplementedError
+    if modele not in TARIFS:
+        # Un cout de zero passerait inapercu dans le tableau et ferait gagner
+        # le mauvais modele. Mieux vaut une erreur qui dit quoi corriger.
+        raise ValueError(f"Pas de tarif pour {modele} : mettez a jour TARIFS dans doc42.config.")
+    entree, sortie = TARIFS[modele]
+    # Les tarifs sont exprimes par MILLION de tokens.
+    return (tokens_entree * entree + tokens_sortie * sortie) / 1_000_000
 
 
 def mesurer(
@@ -135,20 +131,34 @@ def mesurer(
     horloge: Callable[[], float] = time.perf_counter,
     systeme: str | None = None,
 ) -> Mesure:
-    """Envoie `consigne` a `modele` et retourne une Mesure complete.
+    parametres: dict[str, Any] = {
+        "model": modele,
+        # Meme plafond pour tous : sinon on compare des plafonds, pas des modeles.
+        "max_tokens": MAX_TOKENS_DEFAUT,
+        "messages": [{"role": "user", "content": consigne}],
+    }
+    # On n'envoie pas system=None : le parametre est facultatif, et l'absence
+    # n'est pas la meme chose qu'une valeur nulle pour l'API.
+    if systeme is not None:
+        parametres["system"] = systeme
 
-    Attendu :
-      - max_tokens vaut MAX_TOKENS_DEFAUT, le meme pour tous les modeles,
-        sinon la comparaison n'est pas equitable
-      - la duree est mesuree avec `horloge`, appelee exactement deux fois :
-        juste avant et juste apres l'appel. Jamais time.time() directement :
-        le test injecte une horloge factice pour etre deterministe
-      - tokens_entree et tokens_sortie viennent de usage, le cout de
-        cout_estime()
-      - `systeme` n'est transmis (parametre system) que s'il n'est pas None
-    """
-    # TODO
-    raise NotImplementedError
+    # perf_counter et non time.time : il est monotone, une mise a l'heure
+    # de la machine ne fausse pas la mesure. Et il est injecte, pour que le
+    # test soit deterministe.
+    debut = horloge()
+    reponse = client.messages.create(**parametres)
+    fin = horloge()
+
+    usage = reponse.usage
+    return Mesure(
+        modele=modele,
+        texte=_texte_de(reponse),
+        tokens_entree=usage.input_tokens,
+        tokens_sortie=usage.output_tokens,
+        duree=fin - debut,
+        cout=cout_estime(modele, usage.input_tokens, usage.output_tokens),
+        stop_reason=reponse.stop_reason,
+    )
 
 
 def comparer(
@@ -158,89 +168,53 @@ def comparer(
     horloge: Callable[[], float] = time.perf_counter,
     systeme: str | None = None,
 ) -> list[Mesure]:
-    """La meme consigne a chaque modele, une Mesure par modele, dans l'ordre.
-
-    Attendu :
-      - exactement la meme consigne (et le meme systeme) pour tous : on
-        compare les modeles, pas les prompts
-      - l'ordre du resultat suit l'ordre de `modeles`
-    """
-    # TODO
-    raise NotImplementedError
+    # Une seule variable a la fois : le modele. Consigne, systeme et plafond
+    # sont identiques, sinon on ne sait plus ce qu'on mesure.
+    return [mesurer(client, modele, consigne, horloge, systeme) for modele in modeles]
 
 
 def tableau(mesures: Sequence[Mesure]) -> str:
-    """Le tableau comparatif, en Markdown, a coller dans NOTES.md.
+    lignes = [
+        "| Modele | Entree | Sortie | Cout ($) | Duree (s) | Qualite |",
+        "|---|---|---|---|---|---|",
+    ]
+    for m in mesures:
+        # La qualite reste vide : c'est un jugement humain, et c'est lui qui
+        # decide si l'ecart de cout est justifie.
+        lignes.append(
+            f"| {m.modele} | {m.tokens_entree} | {m.tokens_sortie} "
+            f"| {m.cout:.6f} | {m.duree:.2f} |  |"
+        )
+    return "\n".join(lignes)
 
-    Attendu, exactement :
 
-        | Modele | Entree | Sortie | Cout ($) | Duree (s) | Qualite |
-        |---|---|---|---|---|---|
-        | <modele> | <tokens_entree> | <tokens_sortie> | <cout:.6f> | <duree:.2f> |  |
-
-      - une ligne par mesure, dans l'ordre recu, lignes separees par "\\n"
-      - la colonne Qualite reste vide (deux espaces entre les barres) : c'est
-        votre jugement (utilisable tel quel, a retoucher, inutilisable), pas
-        celui du code
-    """
-    # TODO
-    raise NotImplementedError
+# Le tableau de la section 1.1, en code. C'est un point de depart, pas une
+# verite : la section 10 le remplacera par une regle mesuree.
+_ROUTAGE: dict[str, str] = {
+    "tri": MODELE_RAPIDE,
+    "classification": MODELE_RAPIDE,
+    "routage": MODELE_RAPIDE,
+    "moderation": MODELE_RAPIDE,
+    "support": MODELE_RAPIDE,
+    "analyse": MODELE_DEFAUT,
+    "redaction": MODELE_DEFAUT,
+    # Le tableau dit "Sonnet / Opus" : on part du defaut, on monte si besoin.
+    "code": MODELE_DEFAUT,
+    "raisonnement": MODELE_PROFOND,
+    "recherche": MODELE_PROFOND,
+    "agent": MODELE_PROFOND,
+}
 
 
 def choisir_modele(tache: str) -> str:
-    """Votre premiere regle de routage, tiree du tableau de la section 1.1.
-
-    Attendu :
-      - "tri", "classification", "routage", "moderation", "support"
-        -> MODELE_RAPIDE
-      - "analyse", "redaction", "code" -> MODELE_DEFAUT
-      - "raisonnement", "recherche", "agent" -> MODELE_PROFOND
-      - majuscules, accents et espaces autour ne comptent pas :
-        " Redaction " et "redaction" ecrit avec son accent donnent le meme
-        modele
-      - toute autre tache -> MODELE_RAPIDE : on essaie le plus leger d'abord,
-        on ne monte que si on constate qu'il echoue
-    """
-    # TODO
-    raise NotImplementedError
+    # Par defaut, le plus leger : sur une tache simple, le modele le plus
+    # cher ne repond pas mieux, il repond plus cher.
+    return _ROUTAGE.get(normaliser(tache).strip(), MODELE_RAPIDE)
 
 
 def monter_en_gamme(modele: str) -> str | None:
-    """Le palier au-dessus de `modele`, ou None s'il n'y en a pas.
-
-    Attendu :
-      - MODELE_RAPIDE -> MODELE_DEFAUT -> MODELE_PROFOND -> None
-      - un modele inconnu leve ValueError
-    """
-    # TODO
-    raise NotImplementedError
-
-
-# Etapes 1 a 6 de l'atelier, ce qui ne se teste pas
-#
-# Etape 1, sans test : uv sync, copier .env.example en .env, puis
-#   uv run python -c "from doc42.config import verifier; verifier()"
-# Avant de commiter : `git check-ignore .env` doit repondre .env, et
-# `git grep -n "sk-ant-"` ne doit rien trouver. Une cle commitee se revoque
-# depuis la Console : la retirer du commit ne suffit pas, l'historique la garde.
-#
-# Etape 2, sans test : passez premier_appel() avec un vrai client
-# (anthropic.Anthropic()). Lisez usage et stop_reason a voix haute.
-#
-# Etape 3, sans test : avec un vrai client,
-#   from doc42.corpus import trouver
-#   print(tableau(comparer(client, consigne_resume(trouver("note_rh_teletravail")))))
-# Collez le tableau dans NOTES.md et remplissez la colonne Qualite.
-#
-# Etape 4, sans test : meme chose avec
-#   consigne_reclamation("Troisieme relance : la facture F2026-118 est toujours fausse.")
-# Ce que j'ai observe sur la qualite :
-# Ce que j'ai observe sur le cout :
-#
-# Etape 5, sans test : ma regle de routage, en une phrase, dans NOTES.md
-# (elle servira en section 10) :
-#
-# Bonus, sans test : relancez l'etape 3 avec systeme=SYSTEME_CONCIS.
-# Economie de tokens de sortie constatee :
-#
-# Etape 6 : commiter etape/01-premier-appel.
+    # On monte d'un palier quand on a CONSTATE un echec, pas par precaution.
+    if modele not in MODELES:
+        raise ValueError(f"Modele inconnu : {modele}. Les paliers sont dans doc42.config.")
+    rang = MODELES.index(modele)
+    return MODELES[rang + 1] if rang + 1 < len(MODELES) else None
