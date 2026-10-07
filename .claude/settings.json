@@ -12,7 +12,8 @@
     "deny": [
       "Read(./.env)",
       "Edit(./corpus/**)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "mcp__doc42__creer_fiche"
     ]
   }
 }

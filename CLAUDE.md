@@ -18,6 +18,7 @@ Depot de formation : `doc42/` est l'application, `exercices/` les ateliers a com
   (chercher_documents, creer_fiche) -> `doc42/__main__.py` (ligne de commande).
 - `tests/fakes.py` : le FauxClient. `tests/conftest.py` : options `--reel` et `--solutions`.
 - corpus/ : les documents de reference. corpus_pieges/ : documents d'injection, hors corpus.
+- `doc42/mcp_server.py` : serveur MCP `doc42` (stdio), `claude mcp add doc42 -- uv run python -m doc42.mcp_server`.
 
 ## Regles metier (ecrites a la main, d'apres la specification)
 - Toute reponse cite le document source : la CLI finit par `Source : <id>`.
