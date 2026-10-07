@@ -1,0 +1,119 @@
+{
+  "description": "Jeu d'evaluation de l'extraction de metadonnees (section 3). Dix documents du corpus, resultats attendus ecrits a la main en relisant chaque document. Conventions : date du document au format AAAA-MM-JJ (signature pour un contrat ou un avenant, emission pour une facture, sinon la date d'en-tete, jamais celle d'un evenement decrit) ; parties = organisations engagees par un contrat, un avenant ou une facture, liste vide pour les autres types ; echeances = dates auxquelles une somme est payable ou facturee, montant hors taxes fixe par CE document, null s'il ne le precise pas, une echeance recurrente est developpee sur la duree du document.",
+  "cas": [
+    {
+      "document": "contrat_alpha",
+      "note": "Cas nominal : trois echeances explicites, montants egaux.",
+      "attendu": {
+        "type": "contrat",
+        "date": "2026-11-02",
+        "parties": ["Hexalis SAS", "Alpha Logistique SA"],
+        "echeances": [
+          {"date": "2027-01-15", "montant_ht": 16000},
+          {"date": "2027-04-15", "montant_ht": 16000},
+          {"date": "2027-07-15", "montant_ht": 16000}
+        ]
+      }
+    },
+    {
+      "document": "avenant_alpha_01",
+      "note": "Piege : l'avenant rappelle deux echeances du contrat sans en donner le montant (null), et n'ajoute que 6 000 euros au 15/04/2027. Le prix annuel de 54 000 euros n'est pas une echeance.",
+      "attendu": {
+        "type": "avenant",
+        "date": "2026-12-18",
+        "parties": ["Hexalis SAS", "Alpha Logistique SA"],
+        "echeances": [
+          {"date": "2027-01-15", "montant_ht": null},
+          {"date": "2027-04-15", "montant_ht": 6000},
+          {"date": "2027-07-15", "montant_ht": null}
+        ]
+      }
+    },
+    {
+      "document": "contrat_beta",
+      "note": "Echeance recurrente : payable d'avance chaque 1er octobre pendant trois ans a compter du 1er octobre 2026, donc trois dates.",
+      "attendu": {
+        "type": "contrat",
+        "date": "2026-09-09",
+        "parties": ["Hexalis SAS", "Beta Santé SAS"],
+        "echeances": [
+          {"date": "2026-10-01", "montant_ht": 30000},
+          {"date": "2027-10-01", "montant_ht": 30000},
+          {"date": "2028-10-01", "montant_ht": 30000}
+        ]
+      }
+    },
+    {
+      "document": "facture_F2026-118",
+      "note": "Montant hors taxes (8 052), pas TTC. La date est celle d'emission, pas celle de l'echeance.",
+      "attendu": {
+        "type": "facture",
+        "date": "2026-09-30",
+        "parties": ["CloudNord SARL", "Hexalis SAS"],
+        "echeances": [
+          {"date": "2026-11-15", "montant_ht": 8052}
+        ]
+      }
+    },
+    {
+      "document": "pv_comite_direction_2026-09",
+      "note": "Sans echeance de paiement. Pieges : dates limites de decisions (31/12/2026, 31/03/2027, 15 novembre) et budget de 25 000 euros, qui ne sont pas des paiements.",
+      "attendu": {
+        "type": "proces-verbal",
+        "date": "2026-09-22",
+        "parties": [],
+        "echeances": []
+      }
+    },
+    {
+      "document": "note_rh_teletravail",
+      "note": "Sans echeance. Pieges : date d'effet (1er octobre 2026) differente de la date du document, indemnite de 2,50 euros par jour.",
+      "attendu": {
+        "type": "note de service",
+        "date": "2026-09-15",
+        "parties": [],
+        "echeances": []
+      }
+    },
+    {
+      "document": "politique_achats",
+      "note": "Sans echeance. Piege : un delai de paiement (45 jours fin de mois) est une regle, pas une date.",
+      "attendu": {
+        "type": "politique interne",
+        "date": "2026-07-01",
+        "parties": [],
+        "echeances": []
+      }
+    },
+    {
+      "document": "cahier_des_charges_portail",
+      "note": "Sans echeance. Piege : jalons de calendrier (30 septembre 2026, 1er mars 2027) qui ne sont pas des paiements.",
+      "attendu": {
+        "type": "cahier des charges",
+        "date": "2026-08-04",
+        "parties": [],
+        "echeances": []
+      }
+    },
+    {
+      "document": "rapport_incident_2026-08-12",
+      "note": "Sans echeance de paiement. Pieges : le mot echeance y designe des actions correctives, et la date du document (14 aout) n'est pas celle de l'incident (12 aout).",
+      "attendu": {
+        "type": "rapport d'incident",
+        "date": "2026-08-14",
+        "parties": [],
+        "echeances": []
+      }
+    },
+    {
+      "document": "compte_rendu_gamma",
+      "note": "Sans echeance. Pieges : budget indicatif (20 000 a 30 000 euros) et date limite d'envoi d'une proposition (15 octobre 2026), ni l'un ni l'autre n'est un paiement. Les participants ne sont pas des parties engagees.",
+      "attendu": {
+        "type": "compte rendu",
+        "date": "2026-10-01",
+        "parties": [],
+        "echeances": []
+      }
+    }
+  ]
+}

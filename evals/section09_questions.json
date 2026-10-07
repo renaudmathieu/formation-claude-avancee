@@ -1,0 +1,177 @@
+{
+  "description": "Jeu d'evaluation de la recuperation, section 9. Pour chaque question, les documents du corpus qui contiennent vraiment la reponse. Une liste vide signifie que la reponse n'est pas dans le corpus : Doc42 doit le dire au lieu d'inventer.",
+  "redige_le": "2026-10-07",
+  "questions": [
+    {
+      "id": "q01",
+      "question": "Quelles sont les échéances de paiement du contrat Alpha Logistique ?",
+      "attendus": ["contrat_alpha", "avenant_alpha_01"],
+      "categorie": "multi-documents",
+      "note": "L'avenant ajoute un paiement de 6 000 euros au 15/04/2027 : le contrat seul ne suffit pas."
+    },
+    {
+      "id": "q02",
+      "question": "Quel est le nouveau prix annuel du contrat Alpha après l'avenant ?",
+      "attendus": ["avenant_alpha_01"],
+      "categorie": "mots du document"
+    },
+    {
+      "id": "q03",
+      "question": "Combien de jours par semaine un salarié peut-il travailler depuis son domicile ?",
+      "attendus": ["note_rh_teletravail"],
+      "categorie": "paraphrase",
+      "note": "Le document dit télétravailler, pas domicile."
+    },
+    {
+      "id": "q04",
+      "question": "Quel montant est remboursé pour une nuit d'hôtel à Paris ?",
+      "attendus": ["procedure_notes_de_frais"],
+      "categorie": "mots du document"
+    },
+    {
+      "id": "q05",
+      "question": "Qui doit approuver un achat de 12 000 euros ?",
+      "attendus": ["politique_achats"],
+      "categorie": "paraphrase",
+      "note": "Le document parle de seuils de validation, pas d'approbation."
+    },
+    {
+      "id": "q06",
+      "question": "Quel est le montant TTC de la facture F2026-118 ?",
+      "attendus": ["facture_F2026-118"],
+      "categorie": "reference exacte"
+    },
+    {
+      "id": "q07",
+      "question": "Combien de temps la recherche est-elle restée en panne en août ?",
+      "attendus": ["rapport_incident_2026-08-12"],
+      "categorie": "paraphrase",
+      "note": "Le rapport dit indisponible, pas en panne."
+    },
+    {
+      "id": "q08",
+      "question": "Quelle est la durée du contrat HX-2026-021 ?",
+      "attendus": ["contrat_beta"],
+      "categorie": "reference exacte",
+      "note": "Seule la reference distingue le contrat Beta du contrat Alpha (HX-2026-014)."
+    },
+    {
+      "id": "q09",
+      "question": "Quel budget Gamma Retail envisage-t-il pour le pilote ?",
+      "attendus": ["compte_rendu_gamma"],
+      "categorie": "nom propre"
+    },
+    {
+      "id": "q10",
+      "question": "Quelles règles d'accessibilité le portail client doit-il respecter ?",
+      "attendus": ["cahier_des_charges_portail"],
+      "categorie": "mots du document"
+    },
+    {
+      "id": "q11",
+      "question": "Quel chiffre d'affaires Hexalis a-t-elle réalisé au troisième trimestre ?",
+      "attendus": ["pv_comite_direction_2026-09"],
+      "categorie": "mots du document"
+    },
+    {
+      "id": "q12",
+      "question": "Quel taux de disponibilité est garanti à Alpha Logistique ?",
+      "attendus": ["contrat_alpha"],
+      "categorie": "mots du document"
+    },
+    {
+      "id": "q13",
+      "question": "Le support d'Hexalis peut-il consulter les dossiers médicaux des patients de Beta Santé ?",
+      "attendus": ["contrat_beta"],
+      "categorie": "paraphrase",
+      "note": "Le contrat parle de donnees de sante, pas de dossiers medicaux."
+    },
+    {
+      "id": "q14",
+      "question": "Qui est chargé de recruter les ingénieurs support ?",
+      "attendus": ["pv_comite_direction_2026-09"],
+      "categorie": "paraphrase"
+    },
+    {
+      "id": "q15",
+      "question": "Quel jour de la semaine tout le monde doit-il venir au bureau ?",
+      "attendus": ["note_rh_teletravail"],
+      "categorie": "paraphrase",
+      "note": "Le document dit : le mardi est un jour de presence commun."
+    },
+    {
+      "id": "q16",
+      "question": "Sous quel délai Hexalis règle-t-elle ses fournisseurs ?",
+      "attendus": ["politique_achats"],
+      "categorie": "mots du document"
+    },
+    {
+      "id": "q17",
+      "question": "Quand le portail client doit-il être mis en production ?",
+      "attendus": ["cahier_des_charges_portail"],
+      "categorie": "mots du document"
+    },
+    {
+      "id": "q18",
+      "question": "Pourquoi le moteur de recherche est-il tombé le 12 août ?",
+      "attendus": ["rapport_incident_2026-08-12"],
+      "categorie": "paraphrase"
+    },
+    {
+      "id": "q19",
+      "question": "Ai-je le droit de prendre l'avion pour un déplacement de trois heures ?",
+      "attendus": ["procedure_notes_de_frais"],
+      "categorie": "paraphrase",
+      "note": "La procedure impose le train pour les trajets de moins de 4 heures ; le mot avion n'apparait nulle part."
+    },
+    {
+      "id": "q20",
+      "question": "Quels justificatifs exiger d'un nouveau fournisseur ?",
+      "attendus": ["politique_achats"],
+      "categorie": "paraphrase"
+    },
+    {
+      "id": "q21",
+      "question": "Quelle société facture l'hébergement des serveurs GPU d'Hexalis ?",
+      "attendus": ["facture_F2026-118"],
+      "categorie": "mots du document"
+    },
+    {
+      "id": "q22",
+      "question": "Combien de contrats fournisseurs Gamma Retail veut-il faire analyser ?",
+      "attendus": ["compte_rendu_gamma"],
+      "categorie": "nom propre"
+    },
+    {
+      "id": "q23",
+      "question": "Quel budget maximal a été voté pour l'audit de sécurité externe ?",
+      "attendus": ["pv_comite_direction_2026-09"],
+      "categorie": "mots du document"
+    },
+    {
+      "id": "q24",
+      "question": "Que deviennent les documents d'Alpha Logistique à la fin du contrat ?",
+      "attendus": ["contrat_alpha"],
+      "categorie": "nom propre"
+    },
+    {
+      "id": "h01",
+      "question": "Quel est le salaire de la directrice technique ?",
+      "attendus": [],
+      "categorie": "hors corpus"
+    },
+    {
+      "id": "h02",
+      "question": "Quelle est la date de signature du contrat avec Delta Industrie ?",
+      "attendus": [],
+      "categorie": "hors corpus",
+      "note": "Ressemble aux questions sur les contrats Alpha et Beta : la recuperation remontera des contrats, la generation doit refuser."
+    },
+    {
+      "id": "h03",
+      "question": "Quel est le montant de la prime de fin d'année des salariés ?",
+      "attendus": [],
+      "categorie": "hors corpus"
+    }
+  ]
+}
