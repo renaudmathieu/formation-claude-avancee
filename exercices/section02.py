@@ -1,79 +1,95 @@
-"""Section 2, atelier. Cinq exercices, une heure.
+"""Section 2, corrige commente.
 
-Completez les fonctions marquees TODO, puis lancez :
-
-    uv run pytest tests/test_section02.py -v
-
-Les enonces sont dans les docstrings. Vous n'avez pas besoin de revenir
-sur Notion pendant l'atelier.
+Les commentaires expliquent le pourquoi, pas le comment : le comment est
+dans le code.
 """
 
 from __future__ import annotations
 
+import base64
+import mimetypes
+import random
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import anthropic  # noqa: F401  (vous en aurez besoin pour REJOUABLES)
+import anthropic
 
-from doc42.config import MAX_TOKENS_DEFAUT, MODELE_DEFAUT, SYSTEME_DOC42  # noqa: F401
+from doc42.config import MAX_TOKENS_DEFAUT, MODELE_DEFAUT, SYSTEME_DOC42
+
+
+def _texte_de(reponse: Any) -> str:
+    # On concatene tous les blocs texte au lieu de prendre content[0].text.
+    # Des la Section 4, une reponse peut commencer par un bloc tool_use et
+    # cet index sauterait silencieusement sur le mauvais bloc.
+    return "".join(bloc.text for bloc in reponse.content if bloc.type == "text")
 
 
 def appel_simple(client: Any, question: str) -> str:
-    """Envoie `question` a Claude et retourne le TEXTE de la reponse.
-
-    Attendu :
-      - modele, max_tokens et system viennent de doc42.config, jamais en dur
-      - la valeur retournee est une chaine, pas l'objet reponse
-      - vous concatenez tous les blocs de type "text" plutot que de prendre
-        content[0].text (des la Section 4, content[0] peut etre un tool_use)
-    """
-    # TODO
-    raise NotImplementedError
+    reponse = client.messages.create(
+        model=MODELE_DEFAUT,
+        max_tokens=MAX_TOKENS_DEFAUT,
+        system=SYSTEME_DOC42,
+        messages=[{"role": "user", "content": question}],
+    )
+    return _texte_de(reponse)
 
 
 class Conversation:
-    """Conversation multi-tours.
-
-    L'API est sans etat. Si vous n'accumulez pas l'historique vous-meme,
-    le troisieme tour ne saura pas ce qui a ete dit au premier.
-
-    Attendu :
-      - self.messages accumule les tours user ET assistant, dans l'ordre
-      - demander() retourne le texte et met a jour l'historique
-      - deux messages "user" consecutifs sont refuses par l'API : si un appel
-        echoue, n'ajoutez pas de reponse assistant fictive
-    """
-
     def __init__(self, client: Any, systeme: str = SYSTEME_DOC42) -> None:
         self.client = client
         self.systeme = systeme
         self.messages: list[dict[str, Any]] = []
 
     def demander(self, texte: str) -> str:
-        # TODO
-        raise NotImplementedError
+        self.messages.append({"role": "user", "content": texte})
+
+        # L'appel est fait AVANT d'ajouter la reponse assistant. Si l'appel
+        # echoue, l'historique se termine sur un message user, ce qui est un
+        # etat valide pour reessayer. Ajouter une reponse fictive casserait
+        # l'alternance des roles au tour suivant.
+        reponse = self.client.messages.create(
+            model=MODELE_DEFAUT,
+            max_tokens=MAX_TOKENS_DEFAUT,
+            system=self.systeme,
+            messages=self.messages,
+        )
+
+        sortie = _texte_de(reponse)
+        self.messages.append({"role": "assistant", "content": sortie})
+        return sortie
 
 
 def appel_en_flux(client: Any, question: str) -> tuple[str, Any]:
-    """Affiche la reponse au fil de l'eau et retourne (texte complet, usage).
+    morceaux: list[str] = []
+    with client.messages.stream(
+        model=MODELE_DEFAUT,
+        max_tokens=MAX_TOKENS_DEFAUT,
+        system=SYSTEME_DOC42,
+        messages=[{"role": "user", "content": question}],
+    ) as flux:
+        for fragment in flux.text_stream:
+            morceaux.append(fragment)
+            print(fragment, end="", flush=True)
+        # get_final_message() n'est valide qu'apres avoir consomme le flux.
+        # C'est la seule facon d'obtenir un usage complet.
+        final = flux.get_final_message()
+    return "".join(morceaux), final.usage
 
-    Attendu :
-      - vous utilisez client.messages.stream (pas .create)
-      - vous affichez chaque fragment avec print(..., end="", flush=True)
-      - vous recuperez usage via get_final_message(), APRES la boucle
 
-    Piege : usage n'est complet qu'a la fin.
-    """
-    # TODO
-    raise NotImplementedError
-
-
-# TODO : completez ce tuple. Question a vous poser pour chaque exception :
-# est-ce que rejouer la meme requete a une chance de donner un resultat
-# different ? Si non, elle n'a rien a faire ici.
-REJOUABLES: tuple[type[Exception], ...] = ()
+# La question a poser pour chaque exception : rejouer la meme requete
+# peut-il donner un resultat different ?
+#   429 : oui, la limite se libere avec le temps.
+#   500 et 529 : oui, le probleme est cote serveur.
+#   Connexion : oui, le reseau peut revenir.
+#   400 : non, la requete est malformee, elle le restera.
+#   401 : non, la cle est invalide, elle le restera.
+REJOUABLES: tuple[type[Exception], ...] = (
+    anthropic.RateLimitError,
+    anthropic.InternalServerError,
+    anthropic.APIConnectionError,
+)
 
 
 def avec_reprise(
@@ -81,40 +97,46 @@ def avec_reprise(
     tentatives: int = 5,
     dormir: Callable[[float], None] = time.sleep,
 ) -> Any:
-    """Rejoue `appel` en attente exponentielle avec bruit aleatoire.
-
-    Attendu :
-      - seules les exceptions de REJOUABLES sont rattrapees
-      - une BadRequestError (400) remonte immediatement, sans aucun essai
-        supplementaire : le test le verifie explicitement
-      - l'attente est 2**essai plus un bruit aleatoire entre 0 et 1 seconde
-      - vous appelez `dormir`, pas time.sleep directement : le test injecte
-        une fonction factice pour ne pas attendre reellement
-    """
-    # TODO
-    raise NotImplementedError
+    derniere: Exception | None = None
+    for essai in range(tentatives):
+        try:
+            return appel()
+        except REJOUABLES as erreur:
+            derniere = erreur
+            if essai == tentatives - 1:
+                break
+            # Le bruit aleatoire evite que tous les processus reessaient a la
+            # meme seconde et reconstruisent le pic qui a cause le 429.
+            dormir(2**essai + random.uniform(0, 1))
+    raise derniere
 
 
 def analyser_document(client: Any, chemin: str | Path, question: str) -> str:
-    """Envoie un PDF ou une image avec une question, retourne la reponse.
+    chemin = Path(chemin)
+    type_mime, _ = mimetypes.guess_type(chemin.name)
+    if type_mime is None:
+        raise ValueError(f"Type MIME indetermine pour {chemin.name}")
 
-    Attendu :
-      - le contenu du message est une LISTE de blocs, pas une chaine
-      - le bloc du fichier est place AVANT le bloc texte
-      - media_type est deduit de l'extension, pas code en dur
-      - un PDF utilise le type "document", une image le type "image"
-    """
-    # TODO
-    raise NotImplementedError
+    donnees = base64.b64encode(chemin.read_bytes()).decode()
+    genre = "document" if type_mime == "application/pdf" else "image"
 
-
-# Etape 6 de l'atelier, sans test
-#
-# Demandez a Claude : "ecris-moi une fonction de retry pour l'API Anthropic"
-# Comparez sa reponse a votre exercice 4. Dans la grande majorite des cas,
-# la reponse generee attrape toutes les exceptions sans distinguer les
-# rejouables des non rejouables.
-#
-# Ce que j'ai observe :
-#
-# Ce que je corrigerais avant de le mettre en production :
+    reponse = client.messages.create(
+        model=MODELE_DEFAUT,
+        max_tokens=2048,
+        system=SYSTEME_DOC42,
+        messages=[
+            {
+                "role": "user",
+                # Le contenu devient une LISTE de blocs des qu'un fichier est joint.
+                # Le fichier passe avant la question : le modele lit dans l'ordre.
+                "content": [
+                    {
+                        "type": genre,
+                        "source": {"type": "base64", "media_type": type_mime, "data": donnees},
+                    },
+                    {"type": "text", "text": question},
+                ],
+            }
+        ],
+    )
+    return _texte_de(reponse)
