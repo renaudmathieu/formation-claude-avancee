@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(uv run pytest *)",
+      "Bash(uv run ruff check *)"
+    ],
+    "ask": [
+      "Bash(uv run pytest *--reel*)",
+      "Bash(uv add *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Edit(./corpus/**)",
+      "Bash(git push *)"
+    ]
+  }
+}
