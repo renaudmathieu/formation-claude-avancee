@@ -18,6 +18,7 @@ Depot de formation : `doc42/` est l'application, `exercices/` les ateliers a com
   (chercher_documents, creer_fiche) -> `doc42/__main__.py` (ligne de commande).
 - `tests/fakes.py` : le FauxClient. `tests/conftest.py` : options `--reel` et `--solutions`.
 - corpus/ : les documents de reference. corpus_pieges/ : documents d'injection, hors corpus.
+- `doc42/variantes/` : projet final, variante de reference `analyseur` ; voir docs/projet-final.md.
 - `doc42/observabilite.py`, `doc42/garde_fous.py`, `doc42/prompts.py` : journaux JSON et couts, quotas et disjoncteur, prompts versionnes (prompts/registre.json).
 - `doc42/rag.py` : decoupage, BM25, vecteurs, fusion RRF, citations verifiees ; `uv run python -m doc42.rag` mesure.
 - `doc42/agent.py` : agent borne (tours, budget, delai), confirmation humaine avant creer_fiche.

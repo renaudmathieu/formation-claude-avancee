@@ -1,50 +1,35 @@
-"""Section 11, projet final. Le contrat commun aux trois variantes.
+"""Section 11, corrige commente : le contrat commun aux trois variantes.
 
-Cette section n'est pas une serie d'exercices courts : c'est une journee de
-projet. Vous choisissez une variante (A support, B analyseur de documents
-metier, C assistant de code), vous l'ecrivez dans doc42/variantes/, et vous
-la presentez. Ce fichier contient ce que TOUTE variante livree doit savoir
-faire, quelle que soit sa logique metier : c'est la definition de termine,
-rendue testable.
-
-Completez les fonctions marquees TODO dans l'ordre de la journee, puis lancez :
-
-    uv run pytest tests/test_section11.py -v
-
-Les types (Variante, Bornes, Reponse, CasEval, RapportEval) sont donnes : ce
-sont les formes du contrat, ne les changez pas. Votre variante les reutilise.
-
-Ordre conseille, cale sur le tableau 11.2 :
-  0 h 00   exercice 1 (specification) et 2 (anonymisation du corpus)
-  1 h 00   exercices 3 a 6 (la variante, ses garde-fous, son chemin nominal)
-  4 h 00   exercices 7 et 8 (le chiffre de reussite, le livrable)
+Les commentaires expliquent le pourquoi, pas le comment : le comment est
+dans le code. La variante de reference (analyseur de documents metier) est
+livree au checkpoint etape/11-final, dans doc42/variantes/.
 """
 
 from __future__ import annotations
 
-import json  # noqa: F401
+import json
 import re
-import uuid  # noqa: F401
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime  # noqa: F401
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import anthropic  # noqa: F401  (pour rattraper anthropic.APIError)
+import anthropic
 
-from doc42.client import texte_de  # noqa: F401
-from doc42.config import (  # noqa: F401
+from doc42.client import texte_de
+from doc42.config import (
     FACTEUR_CACHE_ECRIT,
     FACTEUR_CACHE_LU,
     MAX_TOKENS_DEFAUT,
     MODELE_DEFAUT,
     TARIFS,
 )
-from doc42.outils import mots, normaliser  # noqa: F401
+from doc42.outils import mots, normaliser
 
 # ---------------------------------------------------------------------------
-# Les formes du contrat. Donnees, ne pas modifier.
+# Les formes du contrat, identiques dans l'exercice.
 # ---------------------------------------------------------------------------
 
 Confirmer = Callable[[str, dict[str, Any]], bool]
@@ -57,12 +42,7 @@ def refuser(nom: str, entree: dict[str, Any]) -> bool:
 
 @dataclass
 class Variante:
-    """Ce qu'une variante declare : son prompt, ses outils, ses actions irreversibles.
-
-    - outils : les definitions envoyees a l'API (name, description, input_schema)
-    - executer(nom, entree) -> str : execute un outil, comme doc42.outils.executer
-    - irreversibles : les noms d'outils qui exigent une confirmation humaine
-    """
+    """Ce qu'une variante declare : son prompt, ses outils, ses actions irreversibles."""
 
     nom: str
     systeme: str
@@ -83,13 +63,7 @@ class Bornes:
 
 @dataclass
 class Reponse:
-    """Ce que toute variante rend, quelle que soit sa logique interne.
-
-    - sources : identifiants de documents cites ET effectivement renvoyes par un outil
-    - escalade : True quand la variante passe la main a un humain
-    - raison : pourquoi elle passe la main ("hors_bornes", "tours", "budget",
-      "erreur", "sans_source"), vide sinon
-    """
+    """Ce que toute variante rend, quelle que soit sa logique interne."""
 
     texte: str
     sources: list[str] = field(default_factory=list)
@@ -102,12 +76,7 @@ class Reponse:
 
 @dataclass
 class CasEval:
-    """Un cas du jeu d'evaluation.
-
-    - attendus : morceaux de texte qui doivent figurer dans la reponse
-    - sources : identifiants qui doivent figurer dans Reponse.sources
-    - escalade : True si la bonne reponse est de passer la main
-    """
+    """Un cas du jeu d'evaluation."""
 
     question: str
     attendus: list[str] = field(default_factory=list)
@@ -130,178 +99,266 @@ class RapportEval:
         return f"{self.reussis}/{self.total} cas reussis ({self.taux:.0%}), cout {self.cout:.4f} $"
 
 
+SECTIONS_SPEC = {
+    "quoi": "Quoi",
+    "critere": "Critere de reussite",
+    "hors perimetre": "Hors perimetre",
+    "risque": "Risque principal",
+}
+NOMBRES_EN_LETTRES = {
+    "deux",
+    "trois",
+    "quatre",
+    "cinq",
+    "six",
+    "sept",
+    "huit",
+    "neuf",
+    "dix",
+    "onze",
+    "douze",
+    "quinze",
+    "vingt",
+    "trente",
+    "cinquante",
+    "cent",
+    "mille",
+    "moitie",
+    "tiers",
+    "quart",
+}
 MIN_CAS = 10
-
-# Les citations de sources suivent la convention de doc42.outils.executer :
-# un identifiant de document entre crochets, par exemple [contrat_alpha].
+MOTS_IRREVERSIBLES = {
+    "ecrit",
+    "ecrire",
+    "cree",
+    "creer",
+    "supprime",
+    "supprimer",
+    "envoie",
+    "envoyer",
+    "modifie",
+    "modifier",
+    "paie",
+    "payer",
+}
 MOTIF_SOURCE = re.compile(r"\[([A-Za-z0-9_.-]+)\]")
 
 
 # ---------------------------------------------------------------------------
-# Exercice 1 : la specification d'une page (0 h 00)
+# Exercice 1 : la specification d'une page
 # ---------------------------------------------------------------------------
+
+
+def _sections(texte: str) -> dict[str, list[str]]:
+    sections: dict[str, list[str]] = {}
+    courante: str | None = None
+    for ligne in texte.splitlines():
+        if re.match(r"#{2,3} ", ligne):
+            titre = normaliser(ligne.lstrip("#").strip())
+            # « Comment on saura que ca marche » est la formulation de la page
+            # Notion ; on l'accepte comme synonyme de « critere ».
+            if "comment on saura" in titre:
+                titre = "critere"
+            # Debut de mot seulement : « Pourquoi » ne doit pas passer pour « Quoi ».
+            courante = next((c for c in SECTIONS_SPEC if re.search(rf"\b{c}", titre)), None)
+            if courante:
+                sections[courante] = []
+            continue
+        if courante and ligne.strip():
+            sections[courante].append(ligne.strip())
+    return sections
 
 
 def verifier_specification(texte: str) -> list[str]:
-    """Verifie la specification d'une page avant la revue de 0 h 30.
+    problemes: list[str] = []
+    sections = _sections(texte)
+    for cle, titre in SECTIONS_SPEC.items():
+        if cle not in sections:
+            problemes.append(f"Section manquante : {titre}")
+        elif not sections[cle]:
+            problemes.append(f"Section vide : {titre}")
 
-    La specification est un Markdown avec quatre sections de niveau ## ou ### :
-    Quoi, Critere de reussite, Hors perimetre, Risque principal.
+    quoi = normaliser(" ".join(sections.get("quoi", [])))
+    if "quoi" in sections and not ("entree" in quoi and "sortie" in quoi):
+        problemes.append("Quoi : il manque un exemple d'entree et un exemple de sortie attendue")
 
-    Retourne la liste des problemes, vide si la specification est recevable.
+    # Un critere sans chiffre est une opinion : on ne saura pas dire a 6 h
+    # si c'est reussi ou non.
+    # « Huit questions sur dix » est chiffre aussi : on accepte les nombres en
+    # lettres, sauf « un » et « une », trop courants pour prouver quoi que ce soit.
+    critere = " ".join(sections.get("critere", []))
+    chiffre = re.search(r"\d", critere) or NOMBRES_EN_LETTRES & set(mots(critere))
+    if "critere" in sections and not chiffre:
+        problemes.append("Critere de reussite : il n'est pas chiffre")
 
-    Attendu :
-      - chaque section absente ou vide est signalee, en citant son nom
-        (« Section manquante : Risque principal »)
-      - les titres se comparent normalises (doc42.outils.normaliser) : « Hors
-        périmètre » et « Ce qui est hors perimetre » sont acceptes, et
-        « Comment on saura que ça marche » vaut « Critere de reussite »
-      - le mot se cherche en debut de mot : « Pourquoi » n'est pas « Quoi »
-      - Quoi contient un exemple d'entree et un exemple de sortie (les mots
-        « entree » et « sortie », normalises) ; sinon un probleme cite « Quoi »
-      - le critere est chiffre : un chiffre, ou un nombre en lettres
-        (« huit questions sur dix »), « un » et « une » ne comptent pas ; sinon
-        un probleme contient le mot « chiffre »
-      - Hors perimetre contient au moins trois elements de liste (lignes
-        commencant par -, * ou 1.) ; sinon un probleme cite « Hors perimetre »
-    """
-    # TODO
-    raise NotImplementedError
+    # La partie que tout le monde saute, et celle qui sauve la journee.
+    items = [
+        ligne for ligne in sections.get("hors perimetre", []) if re.match(r"[-*]|\d+\.", ligne)
+    ]
+    if "hors perimetre" in sections and len(items) < 3:
+        problemes.append(f"Hors perimetre : {len(items)} element(s), il en faut au moins 3")
+    return problemes
 
 
 # ---------------------------------------------------------------------------
-# Exercice 2 : anonymiser avant d'envoyer (0 h 00, avec votre corpus)
+# Exercice 2 : anonymiser avant d'envoyer
 # ---------------------------------------------------------------------------
+
+# L'ordre compte : un IBAN contient des suites de chiffres qu'on prendrait
+# sinon pour un numero de telephone.
+MOTIFS_PERSONNELS = [
+    (re.compile(r"\bFR\d{2}(?: ?[0-9A-Z]{4}){5} ?[0-9A-Z]{3}\b"), "[IBAN]"),
+    (re.compile(r"\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b"), "[EMAIL]"),
+    (re.compile(r"(?<![\d/])(?:\+33 ?|0)[1-9](?:[ .-]?\d{2}){4}(?![\d/])"), "[TELEPHONE]"),
+]
 
 
 def anonymiser(texte: str) -> tuple[str, int]:
-    """Masque les donnees personnelles detectables, retourne (texte, nombre de masques).
-
-    Attendu :
-      - adresse e-mail -> [EMAIL]
-      - telephone francais (06 12 34 56 78, 01.23.45.67.89, +33 6 12 34 56 78)
-        -> [TELEPHONE]
-      - IBAN francais (FR76 3000 6000 0112 3456 7890 189, avec ou sans espaces)
-        -> [IBAN]
-      - les dates (15/01/2027) et les montants (16 000 euros) restent intacts
-
-    Piege : un IBAN contient des suites de chiffres qu'une regle de telephone
-    attrape. Traitez l'IBAN en premier.
-
-    Ce que la fonction ne fait pas : les noms propres. Une regle les raterait
-    ou effacerait « Alpha Logistique ». Ils demandent une relecture humaine,
-    a faire AVANT la formation (piege « corpus non prepare »).
-    """
-    # TODO
-    raise NotImplementedError
+    total = 0
+    for motif, jeton in MOTIFS_PERSONNELS:
+        texte, n = motif.subn(jeton, texte)
+        total += n
+    # Les noms propres ne sont pas detectes : une regle les raterait ou
+    # effacerait « Alpha Logistique ». Ils demandent une relecture humaine.
+    return texte, total
 
 
 # ---------------------------------------------------------------------------
-# Exercice 3 : une variante qui declare ses garde-fous (1 h 00)
+# Exercice 3 : une variante qui declare ses garde-fous
 # ---------------------------------------------------------------------------
 
 
 def verifier_variante(variante: Variante) -> list[str]:
-    """Verifie qu'une variante est recevable avant de la brancher. Retourne les problemes.
+    problemes: list[str] = []
+    if not variante.nom.strip():
+        problemes.append("La variante n'a pas de nom")
+    if not variante.outils:
+        problemes.append("La variante ne declare aucun outil")
+    if variante.modele not in TARIFS:
+        problemes.append(
+            f"Modele {variante.modele} absent de TARIFS : le cout d'une requete serait incalculable"
+        )
 
-    Attendu :
-      - nom vide, aucun outil : signale
-      - modele absent de TARIFS : signale, avec le mot « TARIFS » (sans tarif,
-        le cout d'une requete est incalculable)
-      - un outil sans description : signale, avec le mot « description »
-      - un input_schema dont le type n'est pas "object" : signale
-      - garde-fou fantome : un nom de variante.irreversibles qui ne correspond
-        a aucun outil (une faute de frappe, et la confirmation ne se declenche
-        jamais) : signale, en citant ce nom
-      - un outil dont la description contient un verbe d'ecriture (ecrit,
-        cree, supprime, envoie, modifie, paie, a l'infinitif ou conjugue) et
-        qui n'est pas declare irreversible : signale, en citant l'outil.
-        Comparez des mots (doc42.outils.mots) : « decrit » contient « ecrit »
-        mais n'est pas une ecriture.
-    """
-    # TODO
-    raise NotImplementedError
+    noms = set()
+    for definition in variante.outils:
+        nom = definition.get("name", "")
+        noms.add(nom)
+        if not definition.get("description", "").strip():
+            problemes.append(f"Outil {nom} : description manquante, c'est elle que le modele lit")
+        if definition.get("input_schema", {}).get("type") != "object":
+            problemes.append(f"Outil {nom} : input_schema doit etre de type object")
+        # Un outil qui ecrit et qu'on n'a pas declare irreversible passera
+        # sans confirmation : c'est l'oubli le plus couteux de la journee.
+        ecrit = MOTS_IRREVERSIBLES & set(mots(definition.get("description", "")))
+        if ecrit and nom not in variante.irreversibles:
+            problemes.append(f"Outil {nom} : il semble irreversible mais n'est pas declare")
+
+    # Un garde-fou sur un nom mal orthographie ne se declenche jamais, et
+    # rien ne le signale : c'est un garde-fou fantome.
+    for nom in sorted(variante.irreversibles - noms):
+        problemes.append(f"Garde-fou fantome : {nom} est declare irreversible mais n'existe pas")
+    return problemes
 
 
 # ---------------------------------------------------------------------------
-# Exercice 4 : ce que coute une requete (1 h 00)
+# Exercice 4 : ce que coute une requete
 # ---------------------------------------------------------------------------
 
 
 def cout_appel(modele: str, usage: Any) -> float:
-    """Cout en dollars d'un appel, a partir de reponse.usage.
-
-    Attendu :
-      - tarifs et facteurs de cache viennent de doc42.config (TARIFS est en
-        dollars par million de tokens)
-      - cout = entree * prix_entree + sortie * prix_sortie
-             + cache_lu * prix_entree * FACTEUR_CACHE_LU
-             + cache_ecrit * prix_entree * FACTEUR_CACHE_ECRIT
-      - un champ de cache a None compte pour 0 (le SDK le fait)
-      - un modele absent de TARIFS leve ValueError : un cout inconnu n'est
-        pas un cout nul
-    """
-    # TODO
-    raise NotImplementedError
+    if modele not in TARIFS:
+        # Un cout inconnu n'est pas un cout nul : renvoyer 0 ferait passer
+        # n'importe quelle requete sous le budget.
+        raise ValueError(f"Tarif inconnu pour {modele}, completez TARIFS dans doc42/config.py")
+    prix_entree, prix_sortie = TARIFS[modele]
+    # Le SDK peut renvoyer None pour les champs de cache.
+    lu = getattr(usage, "cache_read_input_tokens", 0) or 0
+    ecrit = getattr(usage, "cache_creation_input_tokens", 0) or 0
+    total = (
+        (usage.input_tokens or 0) * prix_entree
+        + (usage.output_tokens or 0) * prix_sortie
+        + lu * prix_entree * FACTEUR_CACHE_LU
+        + ecrit * prix_entree * FACTEUR_CACHE_ECRIT
+    )
+    return total / 1_000_000
 
 
 class Journal:
-    """Le journal des appels : ce qui permet de dire ce que coute une requete.
-
-    Attendu :
-      - enregistrer(requete_id, modele, usage) ajoute a self.entrees un dict
-        avec au moins : date, requete, modele, entree, sortie, cache_lu,
-        cache_ecrit, cout ; et le retourne
-      - si un chemin est donne, chaque entree est AUSSI ajoutee au fichier,
-        une ligne JSON par appel (creez le dossier parent au besoin)
-      - cout_requete(requete_id) : la somme des couts des appels de cette
-        requete (une question utilisateur fait souvent plusieurs appels)
-      - cout_total() : la somme de tout
-    """
-
     def __init__(self, chemin: str | Path | None = None) -> None:
         self.chemin = Path(chemin) if chemin else None
         self.entrees: list[dict[str, Any]] = []
 
     def enregistrer(self, requete_id: str, modele: str, usage: Any) -> dict[str, Any]:
-        # TODO
-        raise NotImplementedError
+        entree = {
+            "date": datetime.now(UTC).isoformat(timespec="seconds"),
+            "requete": requete_id,
+            "modele": modele,
+            "entree": usage.input_tokens or 0,
+            "sortie": usage.output_tokens or 0,
+            "cache_lu": getattr(usage, "cache_read_input_tokens", 0) or 0,
+            "cache_ecrit": getattr(usage, "cache_creation_input_tokens", 0) or 0,
+            "cout": cout_appel(modele, usage),
+        }
+        self.entrees.append(entree)
+        if self.chemin:
+            # Une ligne JSON par appel : lisible par un humain, agregeable par
+            # un script, et un crash au milieu ne corrompt pas les lignes deja ecrites.
+            self.chemin.parent.mkdir(parents=True, exist_ok=True)
+            with self.chemin.open("a", encoding="utf-8") as fichier:
+                fichier.write(json.dumps(entree, ensure_ascii=False) + "\n")
+        return entree
 
     def cout_requete(self, requete_id: str) -> float:
-        # TODO
-        raise NotImplementedError
+        # Une requete utilisateur, c'est plusieurs appels (tri, outils, reponse).
+        # C'est leur somme qui dit ce que coute une question.
+        return sum(e["cout"] for e in self.entrees if e["requete"] == requete_id)
 
     def cout_total(self) -> float:
-        # TODO
-        raise NotImplementedError
+        return sum(e["cout"] for e in self.entrees)
 
 
 # ---------------------------------------------------------------------------
-# Exercice 5 : executer un outil derriere ses garde-fous (1 h 00)
+# Exercice 5 : executer un outil derriere ses garde-fous
 # ---------------------------------------------------------------------------
 
 
 def resultat_outil(bloc: Any, variante: Variante, confirmer: Confirmer = refuser) -> dict[str, Any]:
-    """Execute le bloc tool_use et retourne le bloc tool_result a renvoyer au modele.
+    resultat: dict[str, Any] = {"type": "tool_result", "tool_use_id": bloc.id}
+    connus = {d["name"] for d in variante.outils}
+    if bloc.name not in connus:
+        return {**resultat, "content": f"Outil inconnu : {bloc.name}", "is_error": True}
 
-    Attendu :
-      - le resultat est {"type": "tool_result", "tool_use_id": bloc.id,
-        "content": <texte>} et porte "is_error": True en cas de probleme
-      - outil inconnu de la variante : is_error, rien n'est execute
-      - outil de variante.irreversibles : on appelle confirmer(nom, entree)
-        AVANT d'executer ; sur refus, rien n'est execute et le contenu dit que
-        l'action a ete refusee (le mot « refusee »), avec is_error
-      - outil en lecture : execute sans demander de confirmation
-      - une exception levee par variante.executer devient un tool_result
-        is_error qui contient le message de l'erreur, pas un crash
-    """
-    # TODO
-    raise NotImplementedError
+    if bloc.name in variante.irreversibles and not confirmer(bloc.name, bloc.input):
+        # On le dit au modele, sinon il annoncera a l'utilisateur une fiche
+        # ou un ticket qui n'existe pas.
+        return {
+            **resultat,
+            "content": f"Action {bloc.name} refusee par l'utilisateur. Elle n'a pas ete executee.",
+            "is_error": True,
+        }
+
+    try:
+        contenu = variante.executer(bloc.name, bloc.input)
+    except Exception as erreur:  # noqa: BLE001
+        # Une erreur d'outil est une information pour le modele, pas un crash
+        # de l'application : il peut reformuler ou dire qu'il ne sait pas.
+        return {
+            **resultat,
+            "content": f"Erreur de l'outil {bloc.name} : {erreur}",
+            "is_error": True,
+        }
+    return {**resultat, "content": contenu}
 
 
 # ---------------------------------------------------------------------------
-# Exercice 6 : repondre, borne, source, et savoir passer la main (1 h 00)
+# Exercice 6 : repondre, borne, source, et savoir passer la main
 # ---------------------------------------------------------------------------
+
+
+def _escalade(raison: str, detail: str, **kwargs: Any) -> Reponse:
+    texte = f"Je ne peux pas repondre de facon fiable ({detail}). Je transmets a un humain."
+    return Reponse(texte=texte, escalade=True, raison=raison, **kwargs)
 
 
 def repondre(
@@ -313,83 +370,161 @@ def repondre(
     confirmer: Confirmer = refuser,
     bornes: Bornes | None = None,
 ) -> Reponse:
-    """La boucle commune a toutes les variantes : outils, bornes, sources, escalade.
+    bornes = bornes or Bornes()
+    # Pas de journal fourni : on en cree un quand meme. Le cout d'une requete
+    # n'est pas une option qu'on active en production.
+    journal = journal if journal is not None else Journal()
+    requete_id = uuid.uuid4().hex[:12]
 
-    Attendu :
-      - un requete_id unique par appel de repondre (uuid), repris dans la Reponse
-      - sans journal fourni, un Journal() est cree quand meme
-      - question plus longue que bornes.max_caracteres : escalade "hors_bornes",
-        SANS aucun appel a l'API
-      - chaque appel envoie model=variante.modele, max_tokens=MAX_TOKENS_DEFAUT,
-        system=variante.systeme, tools=variante.outils, messages=...
-      - chaque appel est journalise (journal.enregistrer) avec son usage
-      - stop_reason "tool_use" : si le cout de la requete depasse deja
-        bornes.budget_dollars, escalade "budget" sans relancer ; sinon chaque
-        tool_use passe par resultat_outil, puis on ajoute le message assistant
-        (reponse.content) et UN message user avec tous les tool_result
-      - autre stop_reason : reponse finale. Les sources sont les identifiants
-        cites entre crochets dans le texte (MOTIF_SOURCE) ET presents dans un
-        tool_result sans erreur ; un identifiant cite mais jamais renvoye est
-        une citation inventee, on l'ecarte. Sans aucune source : escalade
-        "sans_source" (le texte du modele est conserve)
-      - bornes.max_tours appels sans reponse finale : escalade "tours"
-      - anthropic.APIError a l'appel : escalade "erreur"
-      - Reponse.tours = nombre d'appels faits, Reponse.cout = cout de la requete
+    # La borne d'entree se verifie AVANT l'appel : refuser apres avoir paye
+    # ne protege rien.
+    if len(question) > bornes.max_caracteres:
+        return _escalade(
+            "hors_bornes",
+            f"question de {len(question)} caracteres, limite {bornes.max_caracteres}",
+            requete_id=requete_id,
+        )
 
-    Une escalade porte un texte qui le dit, par exemple : « Je ne peux pas
-    repondre de facon fiable (limite de 6 tours atteinte). Je transmets a un
-    humain. »
-    """
-    # TODO
-    raise NotImplementedError
+    messages: list[dict[str, Any]] = [{"role": "user", "content": question}]
+    vus: set[str] = set()
+    for tour in range(1, bornes.max_tours + 1):
+        try:
+            reponse = client.messages.create(
+                model=variante.modele,
+                max_tokens=MAX_TOKENS_DEFAUT,
+                system=variante.systeme,
+                tools=variante.outils,
+                messages=messages,
+            )
+        except anthropic.APIError as erreur:
+            # Les reprises sont l'affaire du client (section 2). Ici, une
+            # erreur qui remonte devient une escalade explicite, pas une trace.
+            return _escalade(
+                "erreur",
+                f"erreur de l'API : {type(erreur).__name__}",
+                tours=tour,
+                cout=journal.cout_requete(requete_id),
+                requete_id=requete_id,
+            )
+        journal.enregistrer(requete_id, variante.modele, reponse.usage)
+        cout = journal.cout_requete(requete_id)
+
+        if reponse.stop_reason != "tool_use":
+            texte = texte_de(reponse)
+            # Une source n'est retenue que si un outil l'a vraiment renvoyee :
+            # un identifiant cite mais jamais lu est une citation inventee.
+            cites = list(dict.fromkeys(MOTIF_SOURCE.findall(texte)))
+            sources = [s for s in cites if s in vus]
+            return Reponse(
+                texte=texte,
+                sources=sources,
+                escalade=not sources,
+                raison="" if sources else "sans_source",
+                tours=tour,
+                cout=cout,
+                requete_id=requete_id,
+            )
+
+        # Le budget se verifie avant de relancer un tour, pas apres la reponse
+        # finale : celle-ci est deja payee, autant la rendre.
+        if cout > bornes.budget_dollars:
+            return _escalade(
+                "budget",
+                f"budget de {bornes.budget_dollars} $ depasse",
+                tours=tour,
+                cout=cout,
+                requete_id=requete_id,
+            )
+
+        resultats = [
+            resultat_outil(bloc, variante, confirmer)
+            for bloc in reponse.content
+            if bloc.type == "tool_use"
+        ]
+        for resultat in resultats:
+            if not resultat.get("is_error"):
+                vus.update(MOTIF_SOURCE.findall(resultat["content"]))
+        # Tous les resultats dans UN message user : deux messages user
+        # consecutifs seraient refuses par l'API.
+        messages.append({"role": "assistant", "content": reponse.content})
+        messages.append({"role": "user", "content": resultats})
+
+    return _escalade(
+        "tours",
+        f"limite de {bornes.max_tours} tours atteinte",
+        tours=bornes.max_tours,
+        cout=journal.cout_requete(requete_id),
+        requete_id=requete_id,
+    )
 
 
 # ---------------------------------------------------------------------------
-# Exercice 7 : le jeu d'evaluation et son chiffre (4 h 00)
+# Exercice 7 : le jeu d'evaluation et son chiffre
 # ---------------------------------------------------------------------------
 
 
 def charger_cas(chemin: str | Path) -> list[CasEval]:
-    """Charge un jeu d'evaluation JSONL : un objet par ligne.
+    cas: list[CasEval] = []
+    for numero, ligne in enumerate(Path(chemin).read_text(encoding="utf-8").splitlines(), 1):
+        if not ligne.strip():
+            continue
+        try:
+            donnees = json.loads(ligne)
+        except json.JSONDecodeError as erreur:
+            raise ValueError(f"ligne {numero} : JSON invalide ({erreur.msg})") from erreur
+        if not str(donnees.get("question", "")).strip():
+            raise ValueError(f"ligne {numero} : champ question manquant")
+        cas.append(
+            CasEval(
+                question=donnees["question"],
+                attendus=list(donnees.get("attendus", [])),
+                sources=list(donnees.get("sources", [])),
+                escalade=bool(donnees.get("escalade", False)),
+            )
+        )
+    return cas
 
-    Exemple de ligne :
-      {"question": "Echeances Alpha ?", "attendus": ["15/04/2027"], "sources": ["contrat_alpha"]}
-      {"question": "CA de Beta en 2025 ?", "escalade": true}
 
-    Attendu :
-      - les lignes vides sont ignorees
-      - attendus, sources et escalade sont optionnels
-      - une ligne sans question, ou qui n'est pas du JSON, leve ValueError
-        avec son numero (« ligne 2 : ... »)
-    """
-    # TODO
-    raise NotImplementedError
+def _verdict(cas: CasEval, reponse: Reponse) -> str:
+    """La raison de l'echec, ou une chaine vide si le cas est reussi."""
+    if cas.escalade:
+        # Savoir dire « je ne sais pas » se mesure comme le reste.
+        return "" if reponse.escalade else "devait passer la main et a repondu"
+    if reponse.escalade:
+        return f"a passe la main ({reponse.raison})"
+    texte = normaliser(reponse.texte)
+    manquants = [a for a in cas.attendus if normaliser(a) not in texte]
+    if manquants:
+        return f"attendu absent : {', '.join(manquants)}"
+    sources = [s for s in cas.sources if s not in reponse.sources]
+    if sources:
+        return f"source non citee : {', '.join(sources)}"
+    return ""
 
 
 def evaluer(repondre: Callable[[str], Reponse], cas: list[CasEval]) -> RapportEval:
-    """Passe chaque cas a `repondre` et compte les reussites.
-
-    `repondre` est une fonction question -> Reponse : en pratique
-    lambda q: repondre(client, variante, q, ...).
-
-    Attendu :
-      - moins de MIN_CAS cas : ValueError (en dessous de dix, un cas vaut plus
-        de dix points et le chiffre ne dit rien)
-      - cas.escalade True : reussi si et seulement si la reponse passe la main
-      - sinon : reussi si la reponse ne passe pas la main, contient chaque
-        attendu (comparaison normalisee : accents et casse ignores) et cite
-        chaque source attendue
-      - une exception levee par repondre compte comme un echec et
-        n'interrompt pas l'evaluation
-      - rapport.echecs : (question, raison) pour chaque echec
-      - rapport.cout : somme des Reponse.cout
-    """
-    # TODO
-    raise NotImplementedError
+    if len(cas) < MIN_CAS:
+        # En dessous, un cas vaut plus de dix points : le chiffre ne dit rien.
+        raise ValueError(f"Jeu d'evaluation trop petit : {len(cas)} cas, il en faut {MIN_CAS}")
+    rapport = RapportEval(total=len(cas), reussis=0)
+    for un_cas in cas:
+        try:
+            reponse = repondre(un_cas.question)
+        except Exception as erreur:  # noqa: BLE001
+            # Un cas qui plante est un resultat, pas un echec de l'evaluation.
+            rapport.echecs.append((un_cas.question, f"exception : {type(erreur).__name__}"))
+            continue
+        rapport.cout += reponse.cout
+        raison = _verdict(un_cas, reponse)
+        if raison:
+            rapport.echecs.append((un_cas.question, raison))
+        else:
+            rapport.reussis += 1
+    return rapport
 
 
 # ---------------------------------------------------------------------------
-# Exercice 8 : le livrable, verifie comme le ferait un collegue (6 h 00)
+# Exercice 8 : le livrable, verifie comme le ferait un collegue
 # ---------------------------------------------------------------------------
 
 
@@ -400,49 +535,46 @@ def verifier_livrable(
     spec: str = "docs/specification.md",
     cas: str = "evals/cas.jsonl",
 ) -> list[str]:
-    """Verifie qu'un depot propre contient de quoi lancer et juger la variante.
+    dossier = Path(dossier)
+    problemes: list[str] = []
 
-    Attendu, chaque manque etant un probleme dans la liste retournee :
-      - le README existe et contient « uv sync », « ANTHROPIC_API_KEY » et
-        « uv run » : un collegue doit pouvoir lancer sans vous
-      - .gitignore contient une ligne .env (sinon la cle part avec le depot)
-      - la specification existe (« Specification absente ») et passe
-        verifier_specification, ses problemes prefixes par « Specification : »
-      - le jeu d'evaluation existe, se charge avec charger_cas et compte au
-        moins MIN_CAS cas (« 5 cas, il en faut 10 »)
-    """
-    # TODO
-    raise NotImplementedError
+    chemin_readme = dossier / readme
+    if not chemin_readme.exists():
+        problemes.append(f"README absent : {readme}")
+    else:
+        contenu = chemin_readme.read_text(encoding="utf-8")
+        # Ce qu'un collegue tape dans un depot propre, dans l'ordre.
+        for attendu, pourquoi in (
+            ("uv sync", "installer les dependances"),
+            ("ANTHROPIC_API_KEY", "configurer la cle"),
+            ("uv run", "lancer l'application"),
+        ):
+            if attendu not in contenu:
+                problemes.append(f"README : {attendu} absent ({pourquoi})")
 
+    gitignore = dossier / ".gitignore"
+    lignes = gitignore.read_text(encoding="utf-8").split() if gitignore.exists() else []
+    if ".env" not in lignes:
+        problemes.append(".gitignore : .env n'est pas ignore, la cle partirait avec le depot")
 
-# Etape 11.2, sans test : la revue de cadrage (0 h 30)
-#
-# Faites relire votre specification par un pair, puis par le formateur.
-# verifier_specification dit si elle est complete, pas si elle est realiste.
-# La question a poser au relecteur : « qu'est-ce que je coupe si a 3 h 30 le
-# chemin nominal ne marche pas ? »
-#
-# Ce que le relecteur a coupe :
-#
-#
-# Etape du point d'etape (3 h 30), sans test
-#
-# Mesurez avant d'optimiser : lancez evaluer sur votre jeu de cas, notez le
-# chiffre et le cout total. Vous en aurez besoin pour la presentation.
-#
-# Chiffre a 3 h 30 :            Cout du jeu complet :
-# Blocage nomme :
-#
-#
-# Etape de la presentation (6 h 00), sans test
-#
-# Dix minutes : la specification, une demonstration du chemin nominal, une
-# escalade (une question hors corpus), le chiffre d'evaluation et le cout par
-# requete lus dans le journal. Prevoyez une capture de secours.
-#
-# La question qu'on m'a posee sur mes choix :
-#
-# Ma reponse :
-#
-#
-# Commitez le checkpoint etape/11-final une fois verifier_livrable vide.
+    chemin_spec = dossier / spec
+    if not chemin_spec.exists():
+        problemes.append(f"Specification absente : {spec}")
+    else:
+        problemes += [
+            f"Specification : {p}"
+            for p in verifier_specification(chemin_spec.read_text(encoding="utf-8"))
+        ]
+
+    chemin_cas = dossier / cas
+    if not chemin_cas.exists():
+        problemes.append(f"Jeu d'evaluation absent : {cas}")
+    else:
+        try:
+            n = len(charger_cas(chemin_cas))
+        except ValueError as erreur:
+            problemes.append(f"Jeu d'evaluation : {erreur}")
+        else:
+            if n < MIN_CAS:
+                problemes.append(f"Jeu d'evaluation : {n} cas, il en faut {MIN_CAS}")
+    return problemes

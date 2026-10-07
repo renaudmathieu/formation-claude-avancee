@@ -1,0 +1,11 @@
+{"id": "contrat_alpha", "attendu": {"type": "contrat", "date": "02/11/2026", "echeances": ["15/01/2027", "15/04/2027", "15/07/2027"], "montant_total_ht": 48000}}
+{"id": "avenant_alpha_01", "attendu": {"type": "avenant", "date": "18/12/2026", "echeances": ["15/01/2027", "15/04/2027", "15/07/2027"], "montant_total_ht": 54000}}
+{"id": "contrat_beta", "attendu": {"type": "contrat", "date": "09/09/2026", "echeances": [], "montant_total_ht": 30000}}
+{"id": "facture_F2026-118", "attendu": {"type": "facture", "date": "30/09/2026", "echeances": ["15/11/2026"], "montant_total_ht": 8052}}
+{"id": "pv_comite_direction_2026-09", "attendu": {"type": "procès-verbal", "date": "22/09/2026", "echeances": []}}
+{"id": "note_rh_teletravail", "attendu": {"type": "note de service", "date": "15/09/2026", "echeances": []}}
+{"id": "politique_achats", "attendu": {"type": "politique interne", "date": "01/07/2026", "echeances": []}}
+{"id": "procedure_notes_de_frais", "attendu": {"type": "procédure", "date": "01/09/2026", "echeances": []}}
+{"id": "cahier_des_charges_portail", "attendu": {"type": "cahier des charges", "date": "04/08/2026", "echeances": []}}
+{"id": "rapport_incident_2026-08-12", "attendu": {"type": "rapport d'incident", "date": "14/08/2026", "echeances": []}}
+{"id": "compte_rendu_gamma", "attendu": {"type": "compte rendu", "date": "01/10/2026", "echeances": []}}

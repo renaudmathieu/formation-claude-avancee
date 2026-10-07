@@ -1,0 +1,14 @@
+{"question": "Quelles sont les échéances de paiement du contrat Alpha Logistique ?", "attendus": ["15/01/2027", "15/04/2027", "15/07/2027"], "sources": ["contrat_alpha"]}
+{"question": "Quel est le prix annuel du contrat Alpha Logistique après l'avenant n° 1 ?", "attendus": ["54 000"], "sources": ["avenant_alpha_01"]}
+{"question": "Quel montant l'avenant n° 1 au contrat Alpha facture-t-il en une fois, et à quelle date ?", "attendus": ["6 000", "15/04/2027"], "sources": ["avenant_alpha_01"]}
+{"question": "Quelle disponibilité mensuelle le contrat Alpha garantit-il ?", "attendus": ["99,5"], "sources": ["contrat_alpha"]}
+{"question": "À partir de quelle date court la licence de Beta Santé ?", "attendus": ["01/10/2026"], "sources": ["contrat_beta"]}
+{"question": "Quelle est la date d'échéance de paiement de la facture F2026-118 ?", "attendus": ["15/11/2026"], "sources": ["facture_F2026-118"]}
+{"question": "Quel est le montant de l'indemnité de télétravail par jour télétravaillé ?", "attendus": ["2,50"], "sources": ["note_rh_teletravail"]}
+{"question": "Au-delà de quel montant un achat doit-il être validé par le comité de direction ?", "attendus": ["10 000"], "sources": ["politique_achats"]}
+{"question": "Quelle a été la cause de l'incident du 12 août 2026 ?", "attendus": ["index"], "sources": ["rapport_incident_2026-08-12"]}
+{"question": "Quelle est la date du prochain comité de direction annoncée dans le procès-verbal de septembre 2026 ?", "attendus": ["20/10/2026"], "sources": ["pv_comite_direction_2026-09"]}
+{"question": "Quel est le plafond de remboursement d'une nuit d'hôtel à Paris ?", "attendus": ["180"], "sources": ["procedure_notes_de_frais"]}
+{"question": "Quelle est la date de mise en production cible du portail client ?", "attendus": ["01/03/2027"], "sources": ["cahier_des_charges_portail"]}
+{"question": "Quel était le chiffre d'affaires de Beta Santé en 2025 ?", "escalade": true}
+{"question": "Quel est le numéro de téléphone de Julien Faure ?", "escalade": true}
