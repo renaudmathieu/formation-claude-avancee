@@ -1,0 +1,7 @@
+{
+  "name": "compteur-doc42",
+  "version": "0.1.0",
+  "description": "Compte les tokens de chaque tour, les affiche dans un panneau (/cout) et demande confirmation avant creer_fiche du serveur MCP Doc42",
+  "author": { "name": "Formation Maîtrisez l'écosystème Anthropic" },
+  "types": "./types/index.d.ts"
+}

@@ -3,7 +3,8 @@
   "permissions": {
     "allow": [
       "Bash(uv run pytest *)",
-      "Bash(uv run ruff check *)"
+      "Bash(uv run ruff check *)",
+      "mcp__doc42__creer_fiche"
     ],
     "ask": [
       "Bash(uv run pytest *--reel*)",
@@ -12,8 +13,7 @@
     "deny": [
       "Read(./.env)",
       "Edit(./corpus/**)",
-      "Bash(git push *)",
-      "mcp__doc42__creer_fiche"
+      "Bash(git push *)"
     ]
   }
 }

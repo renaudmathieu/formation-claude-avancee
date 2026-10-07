@@ -1,0 +1,4 @@
+{
+  "description": "Le module de hooks du mod compteur-doc42",
+  "modules": ["./register.tsx"]
+}
