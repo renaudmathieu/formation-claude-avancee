@@ -1,28 +1,18 @@
-"""Section 10, atelier. Sept exercices, une heure trente.
+"""Section 10, corrige commente.
 
-Objectif : rendre Doc42 observable et borne, sans changer une ligne de sa
-logique metier. Tout ce que vous ecrivez ici s'enroule autour de
-doc42.client ; vous ne modifiez pas doc42.client.
-
-Completez les fonctions marquees TODO, puis lancez :
-
-    uv run pytest tests/test_section10.py -v
-
-Les enonces sont dans les docstrings. Vous n'avez pas besoin de revenir
-sur Notion pendant l'atelier.
-
-Regle de l'atelier : tout ce qui depend du temps (horloge murale,
-chronometre, attente, identifiant aleatoire) est INJECTE en parametre.
-C'est ce qui rend les tests deterministes et instantanes.
+Les commentaires expliquent le pourquoi, pas le comment : le comment est
+dans le code. L'objectif de l'atelier est de rendre Doc42 observable et
+borne sans changer une ligne de sa logique metier : tout ce qui suit
+s'enroule autour de doc42.client, rien ne le remplace.
 """
 
 from __future__ import annotations
 
 import copy
-import hashlib  # noqa: F401  (exercice 6)
-import json  # noqa: F401  (exercices 2, 3 et 6)
-import math  # noqa: F401  (exercice 3)
-import re  # noqa: F401  (exercice 2)
+import hashlib
+import json
+import math
+import re
 import time
 import uuid
 from collections.abc import Callable, Iterable
@@ -31,10 +21,10 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
-import anthropic  # noqa: F401  (exercice 5)
+import anthropic
 
-from doc42.client import REJOUABLES, appel_simple, avec_reprise  # noqa: F401
-from doc42.config import (  # noqa: F401
+from doc42.client import REJOUABLES, appel_simple, avec_reprise
+from doc42.config import (
     FACTEUR_CACHE_ECRIT,
     FACTEUR_CACHE_LU,
     MAX_TOKENS_DEFAUT,
@@ -51,50 +41,41 @@ from doc42.config import (  # noqa: F401
 # ---------------------------------------------------------------------------
 
 
+def _jetons(usage: Any, champ: str) -> int:
+    # Le SDK rend None (et non 0) pour les champs de cache quand le cache
+    # n'a pas servi. "or 0" evite un TypeError au pire moment : en prod.
+    return int(getattr(usage, champ, 0) or 0)
+
+
 def cout_appel(modele: str, usage: Any) -> float:
-    """Le cout en dollars d'un appel, a partir de son `usage`.
-
-    On ne peut pas optimiser ce qu'on ne mesure pas : ce chiffre est la base
-    de tout le reste de l'atelier.
-
-    Attendu :
-      - les tarifs viennent de doc42.config.TARIFS : (entree, sortie) en dollars
-        par MILLION de tokens, pour le modele demande
-      - quatre postes, car input_tokens n'inclut PAS les tokens de cache :
-          input_tokens                 x tarif d'entree
-          cache_read_input_tokens      x tarif d'entree x FACTEUR_CACHE_LU
-          cache_creation_input_tokens  x tarif d'entree x FACTEUR_CACHE_ECRIT
-          output_tokens                x tarif de sortie
-      - un champ absent ou None compte pour 0 (le SDK rend None quand le
-        cache n'a pas servi)
-      - un modele absent de TARIFS leve ValueError
-
-    Piege : l'exemple de la page Notion oublie l'ecriture en cache. C'est
-    pourtant le premier appel, le plus cher.
-    """
-    # TODO
-    raise NotImplementedError
+    if modele not in TARIFS:
+        # Un cout silencieusement nul serait pire qu'une erreur : le tableau
+        # de bord afficherait une fonctionnalite gratuite.
+        raise ValueError(f"Pas de tarif pour {modele!r} dans doc42.config.TARIFS.")
+    entree, sortie = TARIFS[modele]
+    # input_tokens n'inclut PAS les jetons de cache : ce sont trois postes
+    # distincts. Oublier l'ecriture en cache (le piege de l'exemple Notion)
+    # sous-estime precisement l'appel qui coute le plus cher, le premier.
+    total = (
+        _jetons(usage, "input_tokens") * entree
+        + _jetons(usage, "cache_read_input_tokens") * entree * FACTEUR_CACHE_LU
+        + _jetons(usage, "cache_creation_input_tokens") * entree * FACTEUR_CACHE_ECRIT
+        + _jetons(usage, "output_tokens") * sortie
+    )
+    return total / 1_000_000
 
 
 # ---------------------------------------------------------------------------
 # Exercice 2 : un log JSON par appel
 # ---------------------------------------------------------------------------
 
+# Au moins 8 caracteres apres le prefixe : on masque une vraie cle, pas la
+# mention "sk-ant-..." d'une documentation.
+MOTIF_CLE = re.compile(r"sk-ant-[A-Za-z0-9_\-]{8,}")
+
 
 def masquer_secrets(texte: str) -> str:
-    """Remplace toute cle API Anthropic du texte par "sk-ant-***".
-
-    Attendu :
-      - une cle, c'est "sk-ant-" suivi d'au moins 8 caracteres parmi
-        lettres, chiffres, "_" et "-" ; elle devient "sk-ant-***"
-      - "sk-ant-..." (une mention dans une doc) reste intact
-      - le reste du texte est inchange
-
-    Cette fonction sert deux fois : avant d'ecrire un message d'erreur dans
-    un journal, et pour verifier qu'aucun fichier du depot ne contient de cle.
-    """
-    # TODO
-    raise NotImplementedError
+    return MOTIF_CLE.sub("sk-ant-***", texte)
 
 
 def maintenant_utc() -> datetime:
@@ -106,14 +87,9 @@ def nouvel_identifiant() -> str:
 
 
 class ClientInstrumente:
-    """Un enrobage du client qui journalise chaque appel en une ligne JSON.
+    """Se presente comme un client Anthropic : client.messages.create(**kwargs).
 
-    Il se presente comme un client Anthropic (instrumente.messages.create),
-    ce qui permet de le passer tel quel a doc42.client.appel_simple,
-    Conversation, etc. : c'est ainsi qu'on le branche sur TOUS les appels
-    existants sans toucher a leur code.
-
-    Le constructeur et `avec` sont fournis. Vous ecrivez `create`.
+    C'est ce qui permet de le brancher sur doc42.client sans le modifier.
     """
 
     CONTEXTE = ("feature", "prompt_version", "user_id", "question_id")
@@ -140,15 +116,9 @@ class ClientInstrumente:
         self.horloge = horloge
         self.chrono = chrono
         self.generer_id = generer_id
-        # L'astuce qui rend le wrapper transparent : client.messages.create
-        # devient self.create.
         self.messages = self
 
     def avec(self, **contexte: Any) -> ClientInstrumente:
-        """Une copie qui partage client et journal, avec un autre contexte.
-
-        Exemple : instrumente.avec(feature="classification", question_id="q7").
-        """
         inconnus = set(contexte) - set(self.CONTEXTE)
         if inconnus:
             raise TypeError(f"Contexte inconnu : {sorted(inconnus)}")
@@ -159,39 +129,62 @@ class ClientInstrumente:
         return copie
 
     def create(self, **kwargs: Any) -> Any:
-        """Appelle self.client.messages.create(**kwargs), journalise, rend la reponse.
+        # Que des metadonnees : ni messages ni system. Un log qui contient la
+        # conversation est une fuite de donnees personnelles qui dort sur disque.
+        ligne: dict[str, Any] = {
+            "timestamp": self.horloge().isoformat(timespec="milliseconds"),
+            "event": "claude_call",
+            "request_id": self.generer_id(),
+            "question_id": self.question_id,
+            "user_id": self.user_id,
+            "feature": self.feature,
+            "prompt_version": self.prompt_version,
+            "model": kwargs.get("model"),
+            "max_tokens": kwargs.get("max_tokens"),
+        }
+        # Horloge monotone pour la duree : l'horloge murale peut reculer
+        # (synchronisation NTP) et donnerait des latences negatives.
+        debut = self.chrono()
+        try:
+            reponse = self.client.messages.create(**kwargs)
+        except Exception as erreur:
+            # Attraper large est legitime ICI parce qu'on relance aussitot :
+            # on observe, on ne decide pas. Le tri rejouable ou pas reste a
+            # avec_reprise.
+            ligne.update(
+                level="error",
+                success=False,
+                latency_ms=round((self.chrono() - debut) * 1000),
+                cost_usd=0.0,
+                error_type=type(erreur).__name__,
+                # Un message d'erreur peut citer un en-tete ou une cle : on masque.
+                error_message=masquer_secrets(str(erreur)),
+            )
+            self.ecrire(json.dumps(ligne, ensure_ascii=False))
+            raise
 
-        Attendu :
-          - la reponse est rendue intacte, les kwargs passent sans modification
-          - exactement UN appel a self.ecrire par appel, avec une ligne
-            json.dumps(...) (une seule ligne, sans retour a la ligne)
-          - champs de la ligne, avec ces noms (ceux de la page Notion, que
-            Datadog ou Loki savent indexer) :
-              timestamp      self.horloge().isoformat(timespec="milliseconds")
-              event          "claude_call"
-              request_id     self.generer_id()
-              question_id, user_id, feature, prompt_version   le contexte
-              model, max_tokens                               depuis kwargs
-              latency_ms     (chrono() apres - chrono() avant) en ms, arrondi
-              level          "info" ou "error"
-              success        True ou False
-          - en cas de succes, en plus :
-              input_tokens, output_tokens, cache_read_input_tokens,
-              cache_creation_input_tokens   (None compte pour 0)
-              stop_reason
-              cost_usd       cout_appel(model DEMANDE, usage), arrondi a 6
-                             decimales ; None si le modele n'a pas de tarif
-                             (l'observabilite ne doit jamais casser l'appel)
-          - en cas d'exception : la ligne porte success False, error_type
-            (nom de la classe), error_message passe par masquer_secrets,
-            cost_usd 0.0 ; puis l'exception est RELANCEE telle quelle
-          - JAMAIS le contenu de messages ni de system dans la ligne
-
-        Piege : un log qui contient la conversation complete est une fuite
-        de donnees personnelles et une explosion de stockage.
-        """
-        # TODO
-        raise NotImplementedError
+        latence = round((self.chrono() - debut) * 1000)
+        usage = reponse.usage
+        try:
+            # Le modele DEMANDE fait foi pour le tarif : c'est celui de la config.
+            cout: float | None = round(cout_appel(ligne["model"], usage), 6)
+        except ValueError:
+            # L'observabilite ne doit jamais casser le produit : un modele sans
+            # tarif donne un cout inconnu, pas une exception a l'utilisateur.
+            cout = None
+        ligne.update(
+            level="info",
+            success=True,
+            latency_ms=latence,
+            input_tokens=_jetons(usage, "input_tokens"),
+            output_tokens=_jetons(usage, "output_tokens"),
+            cache_read_input_tokens=_jetons(usage, "cache_read_input_tokens"),
+            cache_creation_input_tokens=_jetons(usage, "cache_creation_input_tokens"),
+            stop_reason=getattr(reponse, "stop_reason", None),
+            cost_usd=cout,
+        )
+        self.ecrire(json.dumps(ligne, ensure_ascii=False))
+        return reponse
 
 
 # ---------------------------------------------------------------------------
@@ -199,83 +192,112 @@ class ClientInstrumente:
 # ---------------------------------------------------------------------------
 
 
+def _centile(valeurs: list[float], p: float) -> float | None:
+    # Methode du rang le plus proche : simple, sans interpolation, et c'est ce
+    # que font la plupart des outils d'alerte.
+    if not valeurs:
+        return None
+    triees = sorted(valeurs)
+    rang = max(1, math.ceil(p / 100 * len(triees)))
+    return triees[rang - 1]
+
+
 def agreger(lignes: Iterable[str | dict[str, Any]]) -> dict[str, Any]:
-    """Le bilan d'un journal : combien coute une question a Doc42 ?
+    appels: list[dict[str, Any]] = []
+    for ligne in lignes:
+        if isinstance(ligne, str):
+            if not ligne.strip():
+                continue
+            ligne = json.loads(ligne)
+        if ligne.get("event") == "claude_call":
+            appels.append(ligne)
 
-    `lignes` contient des dictionnaires ou des chaines JSON (une ligne d'un
-    fichier .jsonl). Les chaines vides sont ignorees, ainsi que les lignes
-    dont event n'est pas "claude_call".
+    par_feature: dict[str, dict[str, float]] = {}
+    par_version: dict[str, dict[str, float]] = {}
+    par_question: dict[str, float] = {}
+    total = 0.0
+    for appel in appels:
+        cout = appel.get("cost_usd") or 0.0
+        total += cout
+        for cle, table in (("feature", par_feature), ("prompt_version", par_version)):
+            case = table.setdefault(str(appel.get(cle)), {"appels": 0, "cout_usd": 0.0})
+            case["appels"] += 1
+            case["cout_usd"] += cout
+        # Une question peut couter plusieurs appels (boucle d'outils, agent,
+        # reprises) : c'est le question_id qui les relie. Sans lui, un appel
+        # isole est sa propre question.
+        question = appel.get("question_id") or appel.get("request_id")
+        par_question[question] = par_question.get(question, 0.0) + cout
 
-    Attendu, les cles du dictionnaire rendu :
-      - "appels"                  nombre de lignes claude_call
-      - "echecs"                  nombre de lignes avec success faux
-      - "couts_inconnus"          lignes reussies dont cost_usd est None
-      - "cout_total_usd"          somme des cost_usd (None compte pour 0)
-      - "par_feature"             {feature: {"appels": n, "cout_usd": x}}
-      - "par_version"             {prompt_version: {"appels": n, "cout_usd": x}}
-      - "questions"               nombre de questions distinctes : on regroupe
-                                  par question_id ; une ligne sans question_id
-                                  est sa propre question (cle : request_id)
-      - "cout_moyen_question_usd" cout total / nombre de questions (0.0 si aucune)
-      - "latence_p50_ms", "latence_p99_ms"
-                                  centiles des latency_ms non None, methode du
-                                  rang le plus proche : la valeur de rang
-                                  ceil(p / 100 x n) dans la liste triee
-                                  (None s'il n'y a aucune latence)
-
-    Piege : divisez par le nombre de QUESTIONS, pas d'appels. Une question
-    a Doc42 coute souvent plusieurs appels (classification, outils, reprises).
-    """
-    # TODO
-    raise NotImplementedError
+    for table in (par_feature, par_version):
+        for case in table.values():
+            case["cout_usd"] = round(case["cout_usd"], 6)
+    latences = [a["latency_ms"] for a in appels if a.get("latency_ms") is not None]
+    return {
+        "appels": len(appels),
+        "echecs": sum(1 for a in appels if not a.get("success")),
+        "couts_inconnus": sum(1 for a in appels if a.get("success") and a.get("cost_usd") is None),
+        "cout_total_usd": round(total, 6),
+        "par_feature": par_feature,
+        "par_version": par_version,
+        "questions": len(par_question),
+        "cout_moyen_question_usd": round(total / len(par_question), 6) if par_question else 0.0,
+        "latence_p50_ms": _centile(latences, 50),
+        "latence_p99_ms": _centile(latences, 99),
+    }
 
 
 # ---------------------------------------------------------------------------
 # Exercice 4 : les trois leviers de cout
 # ---------------------------------------------------------------------------
 
+# Levier 1 : le moins cher qui fait le travail. Trier, classer, extraire ne
+# demandent pas le modele de travail.
+FEATURES_LEGERES = frozenset({"classification", "extraction", "routage", "moderation"})
+
 
 def choisir_modele(feature: str) -> str:
-    """Levier 1 : router vers le modele le moins cher qui fait le travail.
-
-    Attendu :
-      - "classification", "extraction", "routage", "moderation" -> MODELE_RAPIDE
-      - "raisonnement_critique" -> MODELE_PROFOND
-      - toute autre fonctionnalite, connue ou non -> MODELE_DEFAUT
-      - aucun identifiant de modele en dur : tout vient de doc42.config
-    """
-    # TODO
-    raise NotImplementedError
+    if feature in FEATURES_LEGERES:
+        return MODELE_RAPIDE
+    if feature == "raisonnement_critique":
+        return MODELE_PROFOND
+    # Une fonctionnalite inconnue va sur le defaut, pas sur le profond :
+    # monter en gamme se decide apres un echec constate, pas par prudence.
+    return MODELE_DEFAUT
 
 
-# Levier 3 : TODO, remplissez ce dictionnaire {feature: max_tokens}.
-# Une etiquette de classification tient en quelques tokens ; aucune valeur
-# ne depasse MAX_TOKENS_DEFAUT. Dans la vraie vie, ces valeurs viennent des
-# journaux : output_tokens au p99, plus une marge.
-MAX_TOKENS_PAR_FEATURE: dict[str, int] = {}
+# Levier 3 : max_tokens est un plafond, pas une cible, mais un plafond trop
+# haut laisse deriver les reponses. Ces valeurs viennent des mesures : on
+# regarde output_tokens au p99 dans les journaux, on ajoute une marge.
+MAX_TOKENS_PAR_FEATURE: dict[str, int] = {
+    "classification": 16,
+    "routage": 16,
+    "extraction": 400,
+    "question": 600,
+    "synthese": 900,
+}
 
 
 def parametres(
     feature: str, question: str, corpus_reference: str = "", systeme: str = SYSTEME_DOC42
 ) -> dict[str, Any]:
-    """Les kwargs de messages.create pour une fonctionnalite, leviers appliques.
-
-    Attendu :
-      - "model" : choisir_modele(feature)
-      - "max_tokens" : MAX_TOKENS_PAR_FEATURE, ou MAX_TOKENS_DEFAUT si absente
-        (une classification ne doit pas depasser 64)
-      - "system" : une LISTE de blocs texte, dans cet ordre : le prompt
-        systeme, puis le corpus de reference s'il n'est pas vide ; le DERNIER
-        bloc porte "cache_control": {"type": "ephemeral"} (levier 2)
-      - "messages" : [{"role": "user", "content": question}]
-      - deux questions differentes donnent exactement le meme "system"
-
-    Piege : le cache ne fonctionne que sur un prefixe STRICTEMENT identique.
-    Un horodatage, un identifiant de session ou un nom d'utilisateur dans
-    system l'annule sans aucun message. Vous le verriez sur la facture.
-    """
-    # TODO
-    raise NotImplementedError
+    # Levier 2 : le cache ne marche que sur un prefixe STRICTEMENT identique.
+    # Tout ce qui est stable (systeme, corpus) vient d'abord, le point de
+    # cache est pose sur le dernier bloc stable, la question vient apres.
+    # Un horodatage ou un nom d'utilisateur dans system casserait le cache
+    # sans aucun message d'erreur : on ne le voit que sur la facture.
+    # Note : sous la taille minimale cacheable du modele, cache_control est
+    # ignore sans erreur. cache_creation_input_tokens dans les logs le dira.
+    blocs: list[dict[str, Any]] = [{"type": "text", "text": systeme}]
+    if corpus_reference:
+        blocs.append({"type": "text", "text": corpus_reference})
+    blocs[-1]["cache_control"] = {"type": "ephemeral"}
+    return {
+        "model": choisir_modele(feature),
+        "max_tokens": MAX_TOKENS_PAR_FEATURE.get(feature, MAX_TOKENS_DEFAUT),
+        "system": blocs,
+        "messages": [{"role": "user", "content": question}],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -293,14 +315,6 @@ class CircuitOuvert(Exception):
 
 
 class Disjoncteur:
-    """Circuit breaker : arreter de taper une API en panne.
-
-    Trois etats : "ferme" (tout passe), "ouvert" (tout est refuse sans
-    appeler), "semi_ouvert" (un seul appel d'essai apres le delai).
-
-    Le constructeur est fourni. Vous ecrivez `appeler`.
-    """
-
     def __init__(
         self, seuil: int = 5, delai_s: float = 60.0, chrono: Callable[[], float] = time.monotonic
     ) -> None:
@@ -312,21 +326,28 @@ class Disjoncteur:
         self.ouvert_depuis: float | None = None
 
     def appeler(self, appel: Callable[[], Any]) -> Any:
-        """Execute `appel()` si le circuit le permet.
-
-        Attendu :
-          - etat "ouvert" et moins de delai_s ecoulees depuis ouvert_depuis
-            (selon self.chrono) : leve CircuitOuvert SANS executer appel()
-          - etat "ouvert" et delai ecoule : passe en "semi_ouvert" et tente
-          - succes : etat "ferme", echecs remis a 0, rend le resultat
-          - exception de REJOUABLES (panne du service) : echecs + 1 ; si
-            l'etat etait "semi_ouvert" ou si echecs >= seuil, etat "ouvert"
-            et ouvert_depuis = self.chrono() ; puis l'exception est relancee
-          - toute autre exception (un 400, un bug) est relancee SANS etre
-            comptee : ce n'est pas une panne du service
-        """
-        # TODO
-        raise NotImplementedError
+        if self.etat == "ouvert":
+            if self.chrono() - self.ouvert_depuis < self.delai_s:
+                # Echouer tout de suite, c'est le service rendu : pas de
+                # requete de plus sur une API deja a genoux, et l'utilisateur
+                # a sa reponse degradee en une milliseconde au lieu de 30 s.
+                raise CircuitOuvert("Circuit ouvert : appel refuse sans contacter l'API.")
+            # Le delai est ecoule : on laisse passer UN appel d'essai.
+            self.etat = "semi_ouvert"
+        try:
+            resultat = appel()
+        except REJOUABLES:
+            # Seules les pannes du service comptent. Un 400 est un bug de
+            # notre code : couper le circuit le masquerait derriere un
+            # message degrade au lieu de le faire corriger.
+            self.echecs += 1
+            if self.etat == "semi_ouvert" or self.echecs >= self.seuil:
+                self.etat = "ouvert"
+                self.ouvert_depuis = self.chrono()
+            raise
+        self.etat = "ferme"
+        self.echecs = 0
+        return resultat
 
 
 def creer_client_production(
@@ -335,21 +356,21 @@ def creer_client_production(
     base_url: str | None = None,
     http_client: Any = None,
     timeout: float = 30.0,
-) -> Any:
-    """Le vrai client Anthropic, regle pour la production.
-
-    Attendu :
-      - anthropic.Anthropic(api_key=cle, base_url=..., http_client=..., ...)
-      - max_retries=0 : la reprise est geree par avec_reprise
-      - timeout explicite (le parametre `timeout`)
-      - cle=None laisse le SDK lire ANTHROPIC_API_KEY : la cle vient de
-        l'environnement ou d'un gestionnaire de secrets, jamais du code
-
-    Piege : le SDK rejoue deja 2 fois par defaut. Sous avec_reprise, chaque
-    tentative en devient 3, avec des attentes que vos journaux ne voient pas.
-    """
-    # TODO
-    raise NotImplementedError
+) -> anthropic.Anthropic:
+    # max_retries=0 : le SDK rejoue deja deux fois par defaut. Empile sous
+    # avec_reprise, cela fait 3 x 5 = 15 requetes pour une seule question,
+    # et des attentes que nos journaux ne voient pas.
+    # timeout explicite : sans lui, un client reste pendu des minutes quand
+    # l'API ralentit (anti-pattern de la section 10.1).
+    # cle=None : le SDK lit ANTHROPIC_API_KEY. La cle vient de l'environnement
+    # ou du gestionnaire de secrets, jamais du code.
+    return anthropic.Anthropic(
+        api_key=cle,
+        base_url=base_url,
+        http_client=http_client,
+        max_retries=0,
+        timeout=timeout,
+    )
 
 
 def repondre(
@@ -359,36 +380,24 @@ def repondre(
     tentatives: int = 3,
     dormir: Callable[[float], None] = time.sleep,
 ) -> str:
-    """Repond via doc42.client.appel_simple, ou rend MESSAGE_DEGRADE en cas de panne.
+    # Le disjoncteur est A L'INTERIEUR de la reprise : chaque tentative compte,
+    # et des que le circuit s'ouvre, CircuitOuvert (non rejouable) arrete la
+    # reprise net au lieu de dormir pour rien.
+    def une_tentative() -> str:
+        return disjoncteur.appeler(lambda: appel_simple(client, question))
 
-    Attendu :
-      - l'appel passe par le disjoncteur, et le tout par avec_reprise
-        (doc42.client) avec `tentatives` et `dormir` : le disjoncteur est
-        DANS la reprise, pour que CircuitOuvert arrete les tentatives
-      - CircuitOuvert ou une exception de REJOUABLES qui a epuise les
-        tentatives : on rend MESSAGE_DEGRADE, pas d'exception
-      - toute autre exception (400, 401) remonte : c'est un bug a corriger,
-        pas une panne a cacher
-
-    Piege : le retry genere sans reflexion fait "except Exception" et
-    rejoue cinq fois. Il transforme une erreur de code en facture.
-    """
-    # TODO
-    raise NotImplementedError
+    try:
+        return avec_reprise(une_tentative, tentatives=tentatives, dormir=dormir)
+    except (CircuitOuvert, *REJOUABLES):
+        # Une panne devient un message. Le reste (400, 401, bug) remonte :
+        # ce sont des erreurs a corriger, pas a cacher.
+        return MESSAGE_DEGRADE
 
 
 # ---------------------------------------------------------------------------
 # Exercice 6 : prompts versionnes
 # ---------------------------------------------------------------------------
 
-# Structure attendue :
-#
-#   prompts/
-#     registre.json        {"doc42_systeme": {"courante": "v2",
-#                            "versions": {"v1": "<sha256>", "v2": "<sha256>"}}}
-#     doc42_systeme.v1.md
-#     doc42_systeme.v2.md
-#     CHANGELOG.md         pourquoi chaque version (comme en section 3)
 DOSSIER_PROMPTS = RACINE / "prompts"
 
 
@@ -401,25 +410,31 @@ class Prompt:
 
     @property
     def identifiant(self) -> str:
-        """Ce qu'on journalise dans prompt_version : nom@version#8 premiers hex."""
         return f"{self.nom}@{self.version}#{self.empreinte[:8]}"
 
 
 def charger_prompt(
     nom: str, version: str = "courante", dossier: str | Path = DOSSIER_PROMPTS
 ) -> Prompt:
-    """Charge un prompt versionne depuis `dossier`.
-
-    Attendu :
-      - lit dossier/registre.json ; version "courante" -> registre[nom]["courante"]
-      - nom ou version absents du registre : KeyError
-      - lit les OCTETS de dossier/<nom>.<version>.md ; empreinte = sha256 hexadecimal
-      - si l'empreinte differe de celle enregistree : ValueError (une version
-        publiee ne se retouche pas, on en cree une nouvelle)
-      - texte = contenu decode en UTF-8, sans les blancs de debut et de fin
-    """
-    # TODO
-    raise NotImplementedError
+    dossier = Path(dossier)
+    registre = json.loads((dossier / "registre.json").read_text(encoding="utf-8"))
+    if nom not in registre:
+        raise KeyError(f"Prompt inconnu : {nom}")
+    entree = registre[nom]
+    version = entree["courante"] if version == "courante" else version
+    if version not in entree["versions"]:
+        raise KeyError(f"Version inconnue pour {nom} : {version}")
+    brut = (dossier / f"{nom}.{version}.md").read_bytes()
+    empreinte = hashlib.sha256(brut).hexdigest()
+    if empreinte != entree["versions"][version]:
+        # Une version publiee est immuable. Si on la retouche, les logs
+        # d'hier et d'aujourd'hui portent la meme etiquette pour deux prompts
+        # differents, et toute comparaison de metriques devient fausse.
+        raise ValueError(
+            f"{nom}.{version}.md a ete modifie apres publication. "
+            "Creez une nouvelle version au lieu de retoucher celle-ci."
+        )
+    return Prompt(nom, version, brut.decode("utf-8").strip(), empreinte)
 
 
 # ---------------------------------------------------------------------------
@@ -434,12 +449,6 @@ class QuotaDepasse(Exception):
 
 
 class Quota:
-    """Quota quotidien par utilisateur : nombre de requetes et budget en dollars.
-
-    Le jour est celui de self.horloge(), en UTC. Le constructeur est fourni ;
-    vous ecrivez `reserver` et `imputer` (et un assistant si vous voulez).
-    """
-
     def __init__(
         self,
         requetes_par_jour: int = 100,
@@ -452,84 +461,38 @@ class Quota:
         self._jour: date | None = None
         self._compteurs: dict[str, dict[str, float]] = {}
 
-    def reserver(self, utilisateur: str) -> None:
-        """A appeler AVANT l'appel a l'API.
+    def _du_jour(self, utilisateur: str) -> dict[str, float]:
+        # Le jour vient de l'horloge injectee, en UTC : le test peut
+        # changer de jour sans attendre minuit.
+        jour = self.horloge().date()
+        if jour != self._jour:
+            self._jour = jour
+            self._compteurs = {}
+        return self._compteurs.setdefault(utilisateur, {"requetes": 0, "cout_usd": 0.0})
 
-        Attendu :
-          - si le jour de self.horloge() a change, tous les compteurs repartent a zero
-          - QuotaDepasse si l'utilisateur a deja fait requetes_par_jour requetes
-            aujourd'hui, ou si son cout du jour atteint budget_usd_par_jour
-          - sinon, compte une requete de plus (avant l'appel : compter apres
-            laisserait passer une rafale de requetes simultanees)
-          - chaque utilisateur a ses propres compteurs
-        """
-        # TODO
-        raise NotImplementedError
+    def reserver(self, utilisateur: str) -> None:
+        compteur = self._du_jour(utilisateur)
+        if compteur["requetes"] >= self.requetes_par_jour:
+            raise QuotaDepasse(f"{utilisateur} : {self.requetes_par_jour} requetes aujourd'hui.")
+        if compteur["cout_usd"] >= self.budget_usd_par_jour:
+            raise QuotaDepasse(f"{utilisateur} : budget de {self.budget_usd_par_jour} $ atteint.")
+        # On compte AVANT l'appel : compter apres laisserait passer une
+        # rafale de requetes simultanees.
+        compteur["requetes"] += 1
 
     def imputer(self, utilisateur: str, cout_usd: float | None) -> None:
-        """A appeler APRES l'appel, avec son cout. Ne leve jamais (None compte 0)."""
-        # TODO
-        raise NotImplementedError
+        # Jamais d'exception ici : l'appel a eu lieu, il est paye. Le
+        # depassement sera refuse a la prochaine reservation.
+        self._du_jour(utilisateur)["cout_usd"] += cout_usd or 0.0
 
 
 def valider_question(question: str) -> str:
-    """Garde-fou d'entree, avant tout appel.
-
-    Attendu :
-      - rend la question sans les blancs de debut et de fin
-      - ValueError si elle est vide (apres nettoyage)
-      - ValueError si elle depasse LONGUEUR_MAX_QUESTION caracteres
-    """
-    # TODO
-    raise NotImplementedError
-
-
-# Etape 2 de l'atelier, sans test
-#
-# Branchez ClientInstrumente sur les scenarios des sections 4 et 8 (un
-# journal .jsonl, un question_id par question posee), puis agregez :
-#
-#     uv run python -m doc42.observabilite journaux/appels.jsonl
-#
-# Combien coute une question a Doc42 ? Quelle fonctionnalite pese le plus ?
-#
-# Ce que j'ai mesure (cout moyen d'une question, avant) :
-#
-# Ce qui m'a surpris :
-
-
-# Etape 3 de l'atelier, sans test
-#
-# Appliquez les leviers UN PAR UN contre la vraie API, en mesurant apres
-# chacun : 1. routage de la classification, 2. cache du prompt systeme et du
-# corpus, 3. max_tokens. Verifiez cache_read_input_tokens dans les journaux :
-# s'il reste a 0, votre prefixe n'est pas stable (ou trop court pour etre
-# cache). Le test de l'exercice 4 simule la facture ; ici, c'est la vraie.
-#
-# Cout moyen apres levier 1 :          apres levier 2 :          apres levier 3 :
-#
-# La qualite a-t-elle bouge ? (relancez le jeu d'evaluation de la section 3)
-
-
-# Etape 5 de l'atelier, sans test
-#
-# Publiez deux versions du prompt systeme dans prompts/, faites tourner le
-# jeu d'evaluation de la section 3 sur chacune (prompt_version dans le
-# journal), puis comparez agreger(...)["par_version"] et les scores.
-#
-# v1 :                                 v2 :
-#
-# Celle que je deploie, et pourquoi :
-
-
-# Etape 7 de l'atelier, sans test
-#
-# Commitez le checkpoint etape/10-prod. Avant : `git log -p | grep sk-ant-`
-# ne doit rien rendre, et .env doit etre dans .gitignore.
-
-
-# Bonus, sans test
-#
-# Branchez le journal sur un tableau de bord, meme minimal, et posez les
-# trois alertes qui comptent : taux d'erreur (> 1 % sur 5 min), cout
-# journalier anormal (> 150 % de la moyenne sur 7 jours), latence p99.
+    if not isinstance(question, str):
+        raise TypeError("La question doit etre une chaine.")
+    propre = question.strip()
+    if not propre:
+        raise ValueError("Question vide : rien a envoyer.")
+    if len(propre) > LONGUEUR_MAX_QUESTION:
+        # Refuser avant l'appel : une entree geante est un cout, pas une question.
+        raise ValueError(f"Question trop longue ({len(propre)} > {LONGUEUR_MAX_QUESTION}).")
+    return propre

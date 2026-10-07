@@ -1,0 +1,9 @@
+{
+  "doc42_systeme": {
+    "courante": "v1",
+    "versions": {
+      "v1": "059a8cf5dba3b73bb388f57773640eb4f00c00febc17319be9a1a5d5c44c9654",
+      "v2": "ddd9554987f10c9745f5097b0ce0cfdda40039ef63834602042a755bbac7d6f5"
+    }
+  }
+}

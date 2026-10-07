@@ -44,3 +44,8 @@ Premier jet, sans structure, conservé pour la comparaison.
   Il contraint le format, pas le contenu.
 - La relance (`--tentatives 3`) mesure le prompt plus son rattrapage. Le taux
   monte, le coût aussi : comparez les deux chiffres, pas seulement le second.
+
+## doc42_systeme (section 10)
+
+- v1 : `SYSTEME_DOC42` de `doc42/config.py`, version courante (`prompts/registre.json`).
+- v2 : candidate, cite les identifiants de documents et répond plus court. À évaluer avant bascule (`uv run python -m doc42.prompts`).
