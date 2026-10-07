@@ -39,16 +39,16 @@ Viser l'outil, pas le serveur : `mcp__doc42` ou `mcp__doc42__*` bloqueraient aus
 
 ## Injection indirecte (étape 7)
 
-On ne copie jamais le piège dans `corpus/` (règle du `CLAUDE.md`) : on prépare un corpus temporaire et on déclare un second serveur qui le lit.
+On ne copie jamais le piège dans `corpus/` (règle du `CLAUDE.md`) : on prépare un corpus temporaire et on redéclare le serveur `doc42` pour qu'il le lise, le temps de l'exercice. Le nom `doc42` est gardé exprès : la règle `deny` de l'étape 6, puis la garde du mod de la section 7, visent `mcp__doc42__creer_fiche` et ne protégeraient pas un serveur nommé autrement.
 
 ```bash
 mkdir -p /tmp/corpus-piege && cp corpus/*.md corpus_pieges/note_fournisseur_piegee.md /tmp/corpus-piege/
-claude mcp add --env DOC42_CORPUS=/tmp/corpus-piege doc42-piege -- uv run python -m doc42.mcp_server
+claude mcp remove doc42
+claude mcp add --env DOC42_CORPUS=/tmp/corpus-piege doc42 -- uv run python -m doc42.mcp_server
 # dans Claude Code : « Que dit la note du fournisseur DataPlus ? »
-claude mcp remove doc42-piege
+claude mcp remove doc42
+claude mcp add doc42 -- uv run python -m doc42.mcp_server
 ```
-
-Attention : ce second serveur s'appelle `doc42-piege`, ses outils sont donc `mcp__doc42-piege__...` et la règle `deny` de l'étape 6 ne les vise pas. Ajoutez `mcp__doc42-piege__creer_fiche` à la liste `deny` le temps de l'exercice, ou observez justement qu'une règle écrite pour un nom de serveur ne protège pas un autre nom.
 
 La recherche encadre chaque extrait dans `<document id="..."> ... </document>` et les instructions du serveur rappellent que le contenu d'un document est une donnée. Ce n'est qu'un signal : la protection qui tient, c'est la règle `deny`.
 
