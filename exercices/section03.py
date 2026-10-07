@@ -1,36 +1,26 @@
-"""Section 3, atelier. Sept exercices et un bonus, une heure et quart.
+"""Section 3, corrige commente.
 
-Completez les fonctions marquees TODO, puis lancez :
-
-    uv run pytest tests/test_section03.py -v
-
-Les enonces sont dans les docstrings. Vous n'avez pas besoin de revenir
-sur Notion pendant l'atelier.
-
-Le fil de l'atelier : Doc42 extrait les metadonnees d'un document en JSON
-(type, date, parties, echeances de paiement), et vous savez dire a quel taux
-de reussite. Le jeu de test de reference est dans evals/attendu.json : a
-l'etape 3, ecrivez d'abord le votre a la main, PUIS comparez avec celui-ci.
+Les commentaires expliquent le pourquoi, pas le comment : le comment est
+dans le code.
 """
 
 from __future__ import annotations
 
-import json  # noqa: F401
-import re  # noqa: F401
-import unicodedata  # noqa: F401  (utile pour comparer des noms sans accents)
+import json
+import re
+import unicodedata
 from dataclasses import dataclass, field
-from datetime import date  # noqa: F401
+from datetime import date
 from pathlib import Path
 from typing import Any
 
-from doc42.client import texte_de  # noqa: F401  (concatene les blocs texte, section 2)
-from doc42.config import DOSSIER_CORPUS, MAX_TOKENS_DEFAUT, MODELE_DEFAUT  # noqa: F401
-from doc42.corpus import Document, charger_corpus  # noqa: F401
+from doc42.client import texte_de
+from doc42.config import DOSSIER_CORPUS, MAX_TOKENS_DEFAUT, MODELE_DEFAUT
+from doc42.corpus import Document, charger_corpus
 
 RACINE = Path(__file__).resolve().parent.parent
 JEU_DEFAUT = RACINE / "evals" / "attendu.json"
 
-# Le contrat de sortie. Ne le modifiez pas : le jeu de test est ecrit contre lui.
 CLES = ("type", "date", "parties", "echeances")
 CLES_ECHEANCE = ("date", "montant_ht")
 TYPES = (
@@ -47,7 +37,8 @@ TYPES = (
     "autre",
 )
 
-# Le meme contrat en JSON Schema, a inserer tel quel dans votre prompt.
+# Le meme contrat, ecrit en JSON Schema : c'est ce que le modele lit dans le
+# prompt, et c'est ce que valider() verifie dans le code. Une seule source.
 SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": list(CLES),
@@ -72,86 +63,205 @@ SCHEMA: dict[str, Any] = {
 }
 
 
+# Exercice 1 : le prompt systeme structure
+
+# L'exemple est fictif expres. Un exemple tire du jeu de test donnerait la
+# reponse au modele pour ce document-la et gonflerait la mesure.
+_EXEMPLE_DOCUMENT = """# Contrat de maintenance : Omega Imprimerie
+Type : contrat
+Date de signature : 3 mars 2025
+Parties : Hexalis SAS et Omega Imprimerie SARL
+Le prix de 9 000 euros HT est payable en deux fois : 4 500 euros HT au 31/03/2025
+et 4 500 euros HT au 30/09/2025."""
+
+_EXEMPLE_SORTIE = {
+    "type": "contrat",
+    "date": "2025-03-03",
+    "parties": ["Hexalis SAS", "Omega Imprimerie SARL"],
+    "echeances": [
+        {"date": "2025-03-31", "montant_ht": 4500},
+        {"date": "2025-09-30", "montant_ht": 4500},
+    ],
+}
+
+
 def construire_systeme(exemple: bool = True) -> str:
-    """Exercice 1 (etape 2). Le prompt systeme structure de l'extraction.
+    # Chaque bloc a une seule responsabilite. Quand une mesure se degrade, on
+    # sait quel bloc on vient de toucher ; dans un paragraphe unique, on ne
+    # le sait pas.
+    role = (
+        "<role>\n"
+        "Tu es l'extracteur de metadonnees de Doc42. Tu lis un document interne "
+        "d'Hexalis et tu en restitues les metadonnees sous forme d'un objet JSON.\n"
+        "</role>"
+    )
+    contexte = (
+        "<context>\n"
+        "Les documents sont des contrats, avenants, factures, proces-verbaux, notes, "
+        "politiques et procedures. Ton JSON est lu par un programme, pas par un humain : "
+        "il est valide contre un schema et toute sortie non conforme est rejetee.\n"
+        "</context>"
+    )
+    # Les regles de date, de parties et d'echeances sont celles du jeu de
+    # test. Si le prompt et le jeu ne disent pas la meme chose, on mesure
+    # un malentendu, pas la qualite du prompt.
+    instructions = (
+        "<instructions>\n"
+        "1. Lis le document en entier avant de repondre.\n"
+        f"2. type : une valeur parmi {', '.join(TYPES)}.\n"
+        "3. date : la date du document au format AAAA-MM-JJ. Date de signature pour un "
+        "contrat ou un avenant, date d'emission pour une facture, sinon la date d'en-tete. "
+        "Jamais la date d'un evenement decrit dans le document. null si elle est absente.\n"
+        "4. parties : les organisations engagees par un contrat, un avenant ou une facture, "
+        "avec leur forme juridique telle qu'ecrite. Liste vide pour les autres types.\n"
+        "5. echeances : chaque date a laquelle une somme est payable ou facturee, avec "
+        "montant_ht, le montant hors taxes fixe par ce document (null s'il ne le precise "
+        "pas). Une echeance recurrente est developpee en une date par occurrence sur la "
+        "duree du document.\n"
+        "6. Les dates limites d'actions, les jalons, les budgets et les delais de paiement "
+        "generaux ne sont pas des echeances.\n"
+        "</instructions>"
+    )
+    contraintes = (
+        "<constraints>\n"
+        "- Reponds uniquement par l'objet JSON, sans texte avant ou apres, sans balise de "
+        "code.\n"
+        "- N'invente rien : une information absente du document vaut null, ou une liste "
+        'vide. Un document sans echeance de paiement donne "echeances": [].\n'
+        "- Respecte exactement ce schema, sans cle supplementaire :\n"
+        f"{json.dumps(SCHEMA, ensure_ascii=False)}\n"
+        "</constraints>"
+    )
+    blocs = [role, contexte, instructions, contraintes]
+    if exemple:
+        # Un exemple vaut dix adjectifs : il fixe la forme des dates, des
+        # montants (nombres, pas chaines) et des noms de parties.
+        blocs.append(
+            "<examples>\n<example>\n"
+            f"<document>\n{_EXEMPLE_DOCUMENT}\n</document>\n"
+            f"<sortie>\n{json.dumps(_EXEMPLE_SORTIE, ensure_ascii=False)}\n</sortie>\n"
+            "</example>\n</examples>"
+        )
+    return "\n\n".join(blocs)
 
-    Les conventions a transmettre au modele sont celles du jeu de test
-    (lisez le champ "description" de evals/attendu.json) :
-      - date : AAAA-MM-JJ ; signature pour un contrat ou un avenant, emission
-        pour une facture, sinon la date d'en-tete ; jamais la date d'un
-        evenement decrit dans le document ; null si absente
-      - parties : organisations engagees par un contrat, un avenant ou une
-        facture, liste vide pour les autres types
-      - echeances : dates auxquelles une somme est payable ou facturee, avec
-        montant_ht (hors taxes, null si le document ne le precise pas) ; une
-        echeance recurrente est developpee sur la duree du document
 
-    Attendu :
-      - cinq blocs balises, dans cet ordre : <role>, <context>, <instructions>,
-        <constraints>, <examples> (chacun ouvert ET ferme)
-      - <instructions> contient des instructions numerotees (« 1. », « 2. »...)
-      - chaque cle de CLES et chaque valeur de TYPES apparait dans le prompt
-      - <constraints> exige un document sans echeance => "echeances": [] (ou
-        « liste vide »), et contient le SCHEMA (json.dumps)
-      - <examples> contient un exemple : un court document FICTIF et sa sortie,
-        un seul objet JSON dans le bloc, et cet objet passe valider()
-      - l'exemple n'emprunte rien au jeu de test (aucune partie du jeu autre
-        qu'Hexalis) : sinon vous donnez la reponse et la mesure est faussee
-      - exemple=False : meme prompt, sans le bloc <examples> (etape 6)
-    """
-    # TODO
-    raise NotImplementedError
+# Exercice 2 : decoder sans se fier au modele
 
 
 def extraire_json(texte: str) -> dict[str, Any]:
-    """Exercice 2. Decode l'objet JSON d'une reponse, sans faire confiance au modele.
+    nettoye = texte.strip()
+    # « Uniquement du JSON » n'empeche pas toujours une balise ```json ou une
+    # phrase d'introduction. On les retire au lieu d'esperer qu'elles
+    # n'arrivent qu'en developpement.
+    bloc = re.search(r"```(?:json)?\s*(.*?)```", nettoye, re.DOTALL)
+    if bloc:
+        nettoye = bloc.group(1).strip()
+    debut, fin = nettoye.find("{"), nettoye.rfind("}")
+    if debut == -1 or fin < debut:
+        raise ValueError("aucun objet JSON dans la reponse")
+    try:
+        donnees = json.loads(nettoye[debut : fin + 1])
+    except json.JSONDecodeError as erreur:
+        raise ValueError(f"JSON invalide : {erreur}") from erreur
+    if not isinstance(donnees, dict):
+        # ValueError et non TypeError : pour l'appelant, c'est le meme echec
+        # (« pas d'objet JSON exploitable »), rattrape au meme endroit.
+        raise ValueError("la racine du JSON doit etre un objet")  # noqa: TRY004
+    return donnees
 
-    Demander « uniquement du JSON » ne suffit pas toujours : la reponse peut
-    arriver entouree de ```json ... ```, ou precedee d'une phrase.
 
-    Attendu :
-      - accepte un JSON nu, un JSON entre balises de code (```json ou ```),
-        un JSON entoure de texte
-      - leve ValueError (et rien d'autre) si aucun objet JSON valide n'est
-        trouve, si le JSON est tronque, ou si la racine n'est pas un objet
-      - retourne un dict
-    """
-    # TODO
-    raise NotImplementedError
+# Exercice 3 : valider contre le schema
+
+
+def _date_iso(valeur: Any) -> bool:
+    # Le motif seul accepterait 2027-02-30 ; fromisoformat seul accepterait
+    # d'autres formes selon la version de Python. Les deux ensemble.
+    if not isinstance(valeur, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", valeur):
+        return False
+    try:
+        date.fromisoformat(valeur)
+    except ValueError:
+        return False
+    return True
+
+
+def _nombre(valeur: Any) -> bool:
+    # True est un int en Python : sans ce test, "montant_ht": true passerait.
+    return isinstance(valeur, int | float) and not isinstance(valeur, bool)
 
 
 def valider(donnees: Any) -> list[str]:
-    """Exercice 3. Valide des donnees contre le contrat (SCHEMA).
+    # On renvoie TOUTES les erreurs, pas la premiere : elles partent telles
+    # quelles dans la relance, et le modele corrige mieux quand il voit tout.
+    if not isinstance(donnees, dict):
+        return ["la racine doit etre un objet JSON"]
+    erreurs = [f"cle manquante : {cle}" for cle in CLES if cle not in donnees]
+    erreurs += [f"cle inattendue : {cle}" for cle in donnees if cle not in CLES]
 
-    Retourne la liste de TOUTES les erreurs, en francais, chacune nommant la
-    cle fautive. Liste vide si tout est conforme. Ne leve jamais d'exception :
-    ces messages partent tels quels dans la relance (exercice 4).
+    if "type" in donnees and donnees["type"] not in TYPES:
+        erreurs.append(
+            f"type inconnu : {donnees['type']!r} (valeurs permises : {', '.join(TYPES)})"
+        )
+    if "date" in donnees and donnees["date"] is not None and not _date_iso(donnees["date"]):
+        erreurs.append(f"date invalide : {donnees['date']!r} (format AAAA-MM-JJ ou null)")
+    if "parties" in donnees:
+        parties = donnees["parties"]
+        if not isinstance(parties, list) or not all(
+            isinstance(p, str) and p.strip() for p in parties
+        ):
+            erreurs.append("parties doit etre une liste de noms (chaines non vides)")
+    if "echeances" in donnees:
+        echeances = donnees["echeances"]
+        if not isinstance(echeances, list):
+            erreurs.append("echeances doit etre une liste")
+        else:
+            for rang, echeance in enumerate(echeances, start=1):
+                if not isinstance(echeance, dict) or set(echeance) != set(CLES_ECHEANCE):
+                    erreurs.append(
+                        f"echeance {rang} : cles attendues exactement date et montant_ht"
+                    )
+                    continue
+                if not _date_iso(echeance["date"]):
+                    erreurs.append(f"echeance {rang} : date invalide {echeance['date']!r}")
+                montant = echeance["montant_ht"]
+                if montant is not None and (not _nombre(montant) or montant < 0):
+                    erreurs.append(
+                        f"echeance {rang} : montant_ht doit etre un nombre positif ou null, "
+                        f"pas {montant!r}"
+                    )
+    return erreurs
 
-    Attendu :
-      - racine : un dict, sinon une erreur
-      - cles : chaque cle de CLES presente, aucune cle en plus
-      - type : une valeur de TYPES (exactement)
-      - date : chaine AAAA-MM-JJ qui est une vraie date (2027-02-30 est
-        refusee), ou None
-      - parties : liste de chaines non vides
-      - echeances : liste d'objets ayant exactement les cles date et
-        montant_ht ; date au format AAAA-MM-JJ (obligatoire) ; montant_ht
-        nombre positif ou None. Attention : True est un int en Python.
-    """
-    # TODO
-    raise NotImplementedError
+
+# Exercice 4 : extraire, avec relance
 
 
 class ErreurExtraction(Exception):
-    """Levee quand l'extraction reste invalide apres toutes les tentatives.
-
-    erreurs : les erreurs de la derniere tentative ; brut : son texte brut.
-    """
-
     def __init__(self, erreurs: list[str], brut: str) -> None:
         super().__init__("; ".join(erreurs))
         self.erreurs = erreurs
         self.brut = brut
+
+
+def bloc_document(document: Document) -> str:
+    return f'<document id="{document.id}">\n{document.texte}\n</document>'
+
+
+def message_document(document: Document) -> str:
+    # Le document d'abord, la consigne ensuite : sur un texte long, la
+    # question placee a la fin est mieux suivie. Les balises separent sans
+    # ambiguite ce qui est a lire de ce qui est a faire.
+    return (
+        f"{bloc_document(document)}\n\n"
+        "Extrais les metadonnees de ce document. Reponds uniquement par l'objet JSON."
+    )
+
+
+def message_relance(erreurs: list[str]) -> str:
+    liste = "\n".join(f"- {e}" for e in erreurs)
+    return (
+        f"Ta reponse n'est pas valide :\n<erreurs>\n{liste}\n</erreurs>\n"
+        "Renvoie uniquement l'objet JSON corrige, conforme au schema."
+    )
 
 
 def extraire(
@@ -163,56 +273,71 @@ def extraire(
     tentatives: int = 3,
     modele: str = MODELE_DEFAUT,
 ) -> dict[str, Any]:
-    """Exercice 4 (etapes 2 et 6). Extrait les metadonnees d'un document, avec relance.
+    systeme = construire_systeme() if systeme is None else systeme
+    messages: list[dict[str, Any]] = [{"role": "user", "content": message_document(document)}]
+    brut = ""
+    erreurs: list[str] = []
+    for _ in range(tentatives):
+        # Le prefill n'entre jamais dans l'historique : on le rajoute a chaque
+        # envoi, apres la derniere consigne.
+        envoyes = messages + ([{"role": "assistant", "content": "{"}] if prefill else [])
+        reponse = client.messages.create(
+            model=modele,
+            max_tokens=MAX_TOKENS_DEFAUT,
+            system=systeme,
+            messages=envoyes,
+        )
+        # Avec prefill, le modele CONTINUE apres « { » : l'accolade n'est pas
+        # dans sa reponse, c'est a nous de la remettre.
+        brut = ("{" if prefill else "") + texte_de(reponse)
+        try:
+            donnees = extraire_json(brut)
+            erreurs = valider(donnees)
+        except ValueError as erreur:
+            erreurs = [str(erreur)]
+        if not erreurs:
+            return donnees
+        # La relance montre au modele sa propre reponse et ce qui ne va pas.
+        # Redemander la meme chose sans dire pourquoi donne souvent la meme
+        # erreur. Le contenu vide est refuse par l'API, d'ou le substitut.
+        messages = messages + [
+            {"role": "assistant", "content": brut or "(reponse vide)"},
+            {"role": "user", "content": message_relance(erreurs)},
+        ]
+    # Pas de relance sur une erreur de l'API (400, 429...) : elle remonte
+    # telle quelle. La relance corrige un contenu, pas un transport.
+    raise ErreurExtraction(erreurs, brut)
 
-    Attendu :
-      - system vaut construire_systeme() si `systeme` est None ; model vaut
-        `modele`, max_tokens vient de doc42.config
-      - le message user contient document.texte entre <document ...> et
-        </document>, PUIS la consigne (le document avant la question)
-      - la reponse est decodee par extraire_json() et validee par valider()
-      - si elle est invalide (JSON ou schema) : relance. On ajoute a
-        l'historique la reponse fautive (role assistant) puis un message user
-        qui liste les erreurs, et on rappelle l'API ; au plus `tentatives`
-        appels au total, puis ErreurExtraction(erreurs, brut)
-      - une erreur de l'API (400, 429...) n'est PAS relancee : elle remonte
-      - prefill=True : chaque envoi se termine par {"role": "assistant",
-        "content": "{"}. Le modele continue APRES l'accolade : remettez-la
-        devant sa reponse avant de decoder.
 
-    Piege : les modeles recents (famille 4.6 et suivantes) refusent le
-    prefill avec une erreur 400. Pour l'etape 6, mesurez-le avec un modele
-    qui l'accepte (MODELE_RAPIDE, a verifier dans la documentation du modele).
-    """
-    # TODO
-    raise NotImplementedError
+# Exercice 5 : le jeu de test
 
 
 def charger_jeu(
     chemin: str | Path = JEU_DEFAUT, dossier: str | Path = DOSSIER_CORPUS
 ) -> list[dict[str, Any]]:
-    """Exercice 5 (etape 3). Charge le jeu de test ET le verifie.
+    cas = json.loads(Path(chemin).read_text(encoding="utf-8"))["cas"]
+    connus = {d.id for d in charger_corpus(dossier)}
+    vus: set[str] = set()
+    for un_cas in cas:
+        identifiant = un_cas["document"]
+        # Un jeu de test faux est pire que pas de jeu : il fait echouer un bon
+        # prompt et reussir un mauvais. On le valide avant de s'en servir.
+        if identifiant not in connus:
+            raise ValueError(f"{identifiant} : document absent du corpus")
+        if identifiant in vus:
+            raise ValueError(f"{identifiant} : document en double dans le jeu")
+        vus.add(identifiant)
+        erreurs = valider(un_cas["attendu"])
+        if erreurs:
+            raise ValueError(f"{identifiant} : attendu invalide ({'; '.join(erreurs)})")
+    return cas
 
-    Format : {"description": "...", "cas": [{"document": id, "note": "...",
-    "attendu": {...}}, ...]}. Retourne la liste "cas".
 
-    Attendu :
-      - ValueError si un document n'existe pas dans le corpus `dossier`
-      - ValueError si un document apparait deux fois
-      - ValueError, avec l'identifiant du document dans le message, si un
-        attendu ne passe pas valider()
-
-    Un jeu de test faux est pire que pas de jeu : il fait echouer un bon
-    prompt et reussir un mauvais.
-    """
-    # TODO
-    raise NotImplementedError
+# Exercice 6 : noter un cas
 
 
 @dataclass
 class Resultat:
-    """Le verdict sur un document. Donne, a ne pas modifier."""
-
     document: str
     json_valide: bool
     cles_ok: bool
@@ -226,8 +351,6 @@ class Resultat:
 
 @dataclass
 class Rapport:
-    """Le verdict sur tout le jeu. Donne, a ne pas modifier."""
-
     resultats: list[Resultat]
 
     @property
@@ -241,33 +364,80 @@ class Rapport:
         return [r for r in self.resultats if not r.reussi]
 
 
+FORMES_JURIDIQUES = {"sa", "sas", "sasu", "sarl", "eurl", "sci"}
+
+
+def _normaliser(texte: str) -> str:
+    sans_accents = unicodedata.normalize("NFKD", texte)
+    sans_accents = "".join(c for c in sans_accents if not unicodedata.combining(c))
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", sans_accents.casefold()).split())
+
+
+def _partie(nom: str) -> str:
+    # « Hexalis » et « HEXALIS SAS » designent la meme organisation. Comparer
+    # les chaines brutes ferait echouer un bon prompt sur un detail de forme.
+    return " ".join(m for m in _normaliser(nom).split() if m not in FORMES_JURIDIQUES)
+
+
+def _meme_montant(a: Any, b: Any) -> bool:
+    if a is None or b is None:
+        return a is None and b is None
+    return _nombre(a) and _nombre(b) and abs(a - b) < 0.01
+
+
+def _comparer_echeances(obtenu: Any, attendu: list[dict[str, Any]]) -> list[str]:
+    if not isinstance(obtenu, list) or not all(isinstance(e, dict) and "date" in e for e in obtenu):
+        return ["echeances : format invalide"]
+    obtenues = {e["date"]: e.get("montant_ht") for e in obtenu}
+    attendues = {e["date"]: e["montant_ht"] for e in attendu}
+    ecarts = []
+    # Inventee et manquante sont deux defauts differents. Le premier est le
+    # plus grave : une date inventee dans un JSON valide passe tous les
+    # controles de forme (le prefill contraint le format, pas le contenu).
+    inventees = sorted(set(obtenues) - set(attendues), key=str)
+    manquantes = sorted(set(attendues) - set(obtenues))
+    if inventees:
+        ecarts.append(f"echeances inventees : {', '.join(map(str, inventees))}")
+    if manquantes:
+        ecarts.append(f"echeances manquantes : {', '.join(manquantes)}")
+    for jour in sorted(set(obtenues) & set(attendues)):
+        if not _meme_montant(obtenues[jour], attendues[jour]):
+            ecarts.append(
+                f"montant au {jour} : obtenu {obtenues[jour]!r}, attendu {attendues[jour]!r}"
+            )
+    return ecarts
+
+
 def evaluer_cas(document: str, brut: str, attendu: dict[str, Any]) -> Resultat:
-    """Exercice 6 (etapes 4 et 7). Note une reponse brute contre l'attendu.
+    # Critere 1 : le JSON est valide.
+    try:
+        obtenu = extraire_json(brut)
+    except ValueError as erreur:
+        return Resultat(document, False, False, False, [str(erreur)])
 
-    Trois criteres : le JSON est valide, les cles attendues sont presentes,
-    les valeurs correspondent.
+    # Critere 2 : les cles attendues sont presentes.
+    manquantes = [cle for cle in CLES if cle not in obtenu]
+    ecarts = [f"cles manquantes : {', '.join(manquantes)}"] if manquantes else []
 
-    Attendu :
-      - JSON invalide : json_valide, cles_ok et valeurs_ok a False, un ecart
-      - cles : cles_ok False si une cle de CLES manque, l'ecart la nomme
-      - valeurs, comparees seulement pour les cles presentes :
-          type : sans tenir compte de la casse ni des accents
-          date : egalite exacte
-          parties : comme ensembles, sans casse, accents, ponctuation ni forme
-            juridique (« hexalis » == « Hexalis SAS »), l'ordre ne compte pas
-          echeances : par date, l'ordre ne compte pas ; montants egaux a un
-            centime pres (8052 == 8052.0), None n'egale que None
-      - les ecarts nomment la cle et la date fautives. Une echeance absente de
-        l'attendu est signalee « inventee », une echeance attendue absente de
-        la reponse est signalee « manquante »
-      - une reponse mal formee (parties qui n'est pas une liste...) donne un
-        ecart, jamais une exception
+    # Critere 3 : les valeurs correspondent, cle par cle, apres normalisation.
+    valeurs: list[str] = []
+    if "type" in obtenu and _normaliser(str(obtenu["type"])) != _normaliser(attendu["type"]):
+        valeurs.append(f"type : obtenu {obtenu['type']!r}, attendu {attendu['type']!r}")
+    if "date" in obtenu and obtenu["date"] != attendu["date"]:
+        valeurs.append(f"date : obtenu {obtenu['date']!r}, attendu {attendu['date']!r}")
+    if "parties" in obtenu:
+        parties = obtenu["parties"]
+        if not isinstance(parties, list) or not all(isinstance(p, str) for p in parties):
+            valeurs.append("parties : format invalide")
+        elif {_partie(p) for p in parties} != {_partie(p) for p in attendu["parties"]}:
+            valeurs.append(f"parties : obtenu {parties}, attendu {attendu['parties']}")
+    if "echeances" in obtenu:
+        valeurs += _comparer_echeances(obtenu["echeances"], attendu["echeances"])
 
-    Etape 7 : sur un document sans echeance, une date en trop doit faire
-    echouer le cas. Le prefill contraint le format, pas le contenu.
-    """
-    # TODO
-    raise NotImplementedError
+    return Resultat(document, True, not manquantes, not valeurs, ecarts + valeurs)
+
+
+# Exercice 7 : evaluer un prompt sur tout le jeu
 
 
 def evaluer(
@@ -280,102 +450,87 @@ def evaluer(
     modele: str = MODELE_DEFAUT,
     dossier: str | Path = DOSSIER_CORPUS,
 ) -> Rapport:
-    """Exercice 7 (etape 4). Passe le prompt sur tout le jeu et note chaque cas.
-
-    Attendu :
-      - un appel a extraire() par cas, dans l'ordre du jeu, avec le document
-        du corpus `dossier` et les options recues
-      - si extraire() leve ErreurExtraction, le cas est quand meme note, sur
-        la reponse brute fautive (erreur.brut)
-      - tentatives vaut 1 par defaut : on mesure le prompt, pas la relance
-      - retourne un Rapport avec un Resultat par cas, dans l'ordre
-    """
-    # TODO
-    raise NotImplementedError
+    # Une seule tentative par defaut : on mesure le PROMPT. Avec la relance,
+    # on mesure le prompt plus son rattrapage, et un mauvais prompt peut
+    # sembler bon au prix de deux fois plus d'appels.
+    corpus = {d.id: d for d in charger_corpus(dossier)}
+    resultats = []
+    for cas in jeu:
+        try:
+            donnees = extraire(
+                client,
+                corpus[cas["document"]],
+                systeme,
+                prefill=prefill,
+                tentatives=tentatives,
+                modele=modele,
+            )
+            brut = json.dumps(donnees, ensure_ascii=False)
+        except ErreurExtraction as erreur:
+            # La reponse fautive est notee quand meme : on veut savoir si
+            # elle a echoue sur la forme, les cles ou les valeurs.
+            brut = erreur.brut
+        resultats.append(evaluer_cas(cas["document"], brut, cas["attendu"]))
+    return Rapport(resultats)
 
 
 def resume(rapport: Rapport) -> str:
-    """Exercice 7, suite. Le texte que affiche evals/lancer.py.
+    total = len(rapport.resultats)
+    reussis = total - len(rapport.echecs)
+    lignes = [f"Taux de reussite : {reussis}/{total} ({rapport.taux * 100:.0f} %)"]
+    if not rapport.echecs:
+        lignes.append("Aucun echec.")
+    else:
+        lignes.append("Echecs :")
+        lignes += [f"- {r.document} : {'; '.join(r.ecarts)}" for r in rapport.echecs]
+    return "\n".join(lignes)
 
-    Attendu :
-      - une ligne « Taux de reussite : 8/10 (80 %) »
-      - puis chaque echec avec son identifiant de document et ses ecarts,
-        ou « Aucun echec. »
-      - les documents reussis n'apparaissent pas
-    """
-    # TODO
-    raise NotImplementedError
+
+# Bonus : le juge
+
+SYSTEME_JUGE = (
+    "<role>\nTu evalues une extraction de metadonnees faite par un autre modele.\n</role>\n\n"
+    "<instructions>\n"
+    "1. Compare l'extraction au document, champ par champ.\n"
+    "2. Releve toute valeur absente du document (invention) et toute echeance de paiement "
+    "oubliee.\n"
+    "3. Raisonne dans <analyse>, puis donne une note entiere de 1 a 5 dans <note>, "
+    "5 signifiant exacte et complete.\n"
+    "</instructions>"
+)
 
 
 def juger(client: Any, document: Document, extraction: dict[str, Any]) -> int:
-    """Bonus. Le pattern juge : un second appel note l'extraction de 1 a 5.
-
-    Attendu :
-      - le message user contient le texte du document ET l'extraction en JSON
-      - un prompt systeme qui demande de raisonner, puis la note dans
-        <note>N</note>
-      - modele et max_tokens viennent de doc42.config
-      - retourne la note (int). ValueError si la reponse n'a pas de <note>
-        ou si la note sort de 1 a 5 : une note illisible n'est pas une note
-        moyenne
-    """
-    # TODO
-    raise NotImplementedError
+    # Ici, le raisonnement pas a pas vaut ses tokens : juger est une tache de
+    # comparaison, pas une extraction simple. La note en balise se recupere
+    # sans ambiguite meme apres un long raisonnement.
+    reponse = client.messages.create(
+        model=MODELE_DEFAUT,
+        max_tokens=MAX_TOKENS_DEFAUT,
+        system=SYSTEME_JUGE,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"{bloc_document(document)}\n\n"
+                    f"<extraction>\n{json.dumps(extraction, ensure_ascii=False)}\n</extraction>"
+                    "\n\nNote cette extraction."
+                ),
+            }
+        ],
+    )
+    trouve = re.search(r"<note>\s*(\d+)\s*</note>", texte_de(reponse))
+    if not trouve or not 1 <= int(trouve.group(1)) <= 5:
+        # Une note illisible n'est pas une note moyenne : on refuse de deviner.
+        raise ValueError("le juge n'a pas rendu de note entre 1 et 5 dans <note>")
+    return int(trouve.group(1))
 
 
 def divergences(juge: dict[str, int], humain: dict[str, int], ecart_max: int = 1) -> list[str]:
-    """Bonus, suite. Ou le juge s'ecarte-t-il de votre propre jugement ?
-
-    juge et humain associent un identifiant de document a une note.
-
-    Attendu :
-      - les documents notes par l'humain dont la note du juge differe de plus
-        de `ecart_max`, ou que le juge n'a pas notes
-      - dans l'ordre du dictionnaire humain
-    """
-    # TODO
-    raise NotImplementedError
-
-
-# Etape 1 de l'atelier, sans test
-#
-# Avant l'exercice 1, ecrivez un premier prompt sans structure (un paragraphe)
-# et lancez-le sur contrat_alpha, facture_F2026-118 et
-# rapport_incident_2026-08-12. Notez ce qui varie d'un document a l'autre :
-# noms des cles, format des dates, montants en chaines, texte autour du JSON.
-#
-# PROMPT_V1 = "..."
-#
-# Ce que j'ai observe :
-
-
-# Etape 5 de l'atelier, sans test
-#
-# Mesurez le prompt de l'etape 1 et celui de l'exercice 1 sur les dix
-# documents, avec evaluer() et resume() (ou evals/lancer.py). Ecrivez les
-# deux chiffres. C'est la premiere fois qu'on remplace une impression par
-# une mesure.
-#
-# Prompt v1 : ../10      Prompt v2 : ../10
-
-
-# Etape 6 de l'atelier, sans test
-#
-# Un changement a la fois, une mesure a chaque fois :
-#   - v2 + prefill=True (avec un modele qui accepte le prefill) : ../10
-#   - v2 sans exemple, construire_systeme(exemple=False) : ../10
-# Quel changement a produit le gain ou la perte ?
-
-
-# Etape 8 de l'atelier, sans test
-#
-# Versionnez : prompts/extraction.v1.md, prompts/extraction.v2.md et
-# prompts/CHANGELOG.md, qui dit pourquoi on est passe de l'un a l'autre et
-# ce que la mesure a donne. Le prompt fait partie du code.
-
-
-# Bonus, sans test
-#
-# Faites noter les dix extractions par juger(), notez-les vous-meme de 1 a 5,
-# puis appelez divergences(). Sur quels documents le juge diverge-t-il ?
-# Lui confieriez-vous un tri en masse ? Un cas limite ?
+    # Le juge herite des biais du modele qu'il evalue. Avant de lui confier
+    # un tri en masse, on mesure ou il s'ecarte de votre propre jugement.
+    return [
+        document
+        for document, note in humain.items()
+        if document not in juge or abs(juge[document] - note) > ecart_max
+    ]
