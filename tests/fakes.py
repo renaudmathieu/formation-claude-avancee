@@ -16,12 +16,14 @@ def tool_use(name: str, tool_input: dict, block_id: str = "toolu_1") -> SimpleNa
     return SimpleNamespace(type="tool_use", id=block_id, name=name, input=tool_input)
 
 
-def response(*content, stop_reason: str = "end_turn") -> SimpleNamespace:
+def response(
+    *content, stop_reason: str = "end_turn", input_tokens: int = 10, output_tokens: int = 5
+) -> SimpleNamespace:
     return SimpleNamespace(
         content=list(content),
         stop_reason=stop_reason,
         model="claude-test",
-        usage=SimpleNamespace(input_tokens=10, output_tokens=5),
+        usage=SimpleNamespace(input_tokens=input_tokens, output_tokens=output_tokens),
     )
 
 

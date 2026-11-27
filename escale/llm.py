@@ -6,13 +6,16 @@ from escale.config import MAX_TOKENS, default_model
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
-def send(client, messages, *, system=None, tools=None, tool_choice=None, effort="low"):
+def send(
+    client, messages, *, system=None, tools=None, tool_choice=None, effort="low", model=None
+):
     """Send the conversation to Claude and return the response.
 
     The API is stateless: `messages` must hold the whole conversation.
+    `model` overrides the default model (used to compare models).
     """
     request = {
-        "model": default_model(),
+        "model": model or default_model(),
         "max_tokens": MAX_TOKENS,
         "messages": messages,
         "thinking": {"type": "adaptive", "display": "summarized"},
