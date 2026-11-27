@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+.idea/
+.pytest_cache/
+.ruff_cache/
+# Secrets: never commit real API keys
+.env
+.env.*
+!.env.example
+# Generated at run time
+.escale/
+sortie/*
+!sortie/.gitkeep
