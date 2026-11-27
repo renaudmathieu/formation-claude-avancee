@@ -13,6 +13,7 @@
       "Bash(uv run python -m escale *)"
     ],
     "deny": [
+      "mcp__escale__book_hotel",
       "Bash(git push *)",
       "Bash(git reset --hard *)",
       "Read(./.env)",

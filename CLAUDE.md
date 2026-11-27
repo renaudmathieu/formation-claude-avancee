@@ -13,7 +13,12 @@
 - `escale/tools/` contient les tools. Une panne se signale par `ToolError`.
   Pour en ajouter un : `/ajouter-tool`.
 - `escale/extraction.py` lit un justificatif. `escale/check.py` le compare à la politique.
-- La politique de voyage est dans `data/politique-voyage/` (une page Markdown par sujet).
+- `escale/mcp_server.py` expose la recherche, la ressource `escale://politique` et `book_hotel`
+  (stdio, déclaré dans `.mcp.json`). `escale/mcp_client.py` charge les tools d'un serveur distant,
+  `escale/transport_server.py` est le serveur de démonstration (trains, hôtels), lancé à part.
+- `book_hotel` est définitif : `mcp__escale__book_hotel` est refusé dans `.claude/settings.json`.
+- La politique de voyage est dans `data/politique-voyage/` (une page Markdown par sujet),
+  ou le dossier `ESCALE_POLITIQUE` s'il est défini.
 
 ## Règles métier (à faire respecter dans le code et dans les réponses)
 - Toute règle appliquée cite sa page de la politique, par exemple « page hebergement ».

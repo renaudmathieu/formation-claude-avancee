@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "escale": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "escale.mcp_server"],
+      "env": { "ESCALE_POLITIQUE": "${ESCALE_POLITIQUE:-}" }
+    }
+  }
+}

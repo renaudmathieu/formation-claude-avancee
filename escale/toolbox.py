@@ -3,6 +3,9 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
+# Server tool that lets Claude find a deferred tool by keywords (BM25), run by the API.
+TOOL_SEARCH = {"type": "tool_search_tool_bm25_20251119", "name": "tool_search_tool_bm25"}
+
 
 class ToolError(Exception):
     """A tool failed in a way Claude can read and work around."""
@@ -34,8 +37,16 @@ class Toolbox:
             self.tools[tool.name] = tool
 
     def definitions(self) -> list[dict]:
-        """Return the definitions sent to the API, in a stable order."""
-        return [tool.definition for tool in self.tools.values()]
+        """Return the definitions sent to the API, in a stable order.
+
+        A deferred definition is useless without the tool search tool, so it is added once,
+        last, as soon as one tool is deferred. Local tools are never deferred: the API
+        refuses a request where every tool is.
+        """
+        definitions = [tool.definition for tool in self.tools.values()]
+        if any(d.get("defer_loading") for d in definitions):
+            definitions.append(TOOL_SEARCH)
+        return definitions
 
     def source_of(self, name: str) -> str:
         """Tell where a tool comes from, for the trace."""

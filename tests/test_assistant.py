@@ -1,5 +1,6 @@
 from datetime import date
 
+from escale import assistant
 from escale.agent import AgentResult
 from escale.assistant import build_toolbox, describe, run_task, system_prompt
 from escale.toolbox import Toolbox
@@ -10,7 +11,8 @@ def test_system_prompt_gives_today_s_date():
     assert "2026-11-26" in system_prompt(date(2026, 11, 26))
 
 
-def test_toolbox_holds_the_policy_weather_and_file_tools():
+def test_toolbox_holds_the_policy_weather_and_file_tools(monkeypatch):
+    monkeypatch.setattr(assistant, "remote_tools", list)
     assert set(build_toolbox().tools) == {
         "get_weather",
         "search_travel_policy",

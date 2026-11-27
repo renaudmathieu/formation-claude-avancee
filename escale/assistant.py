@@ -4,7 +4,8 @@ from datetime import date
 from pathlib import Path
 
 from escale.agent import AgentResult, run_agent
-from escale.toolbox import Toolbox
+from escale.mcp_client import McpUnavailableError, load_mcp_tools, mcp_deferred, mcp_url
+from escale.toolbox import Tool, Toolbox
 from escale.tools.files import file_tools
 from escale.tools.policy import policy_tool
 from escale.tools.weather import weather_tool
@@ -29,9 +30,21 @@ def system_prompt(today: date) -> str:
     )
 
 
+def remote_tools() -> list[Tool]:
+    """Load the MCP tools. An unavailable server must not prevent the agent from working."""
+    url = mcp_url()
+    try:
+        tools = load_mcp_tools(url, deferred=mcp_deferred())
+    except McpUnavailableError as error:
+        print(f"[mcp] Serveur injoignable ({url}), l'agent continue sans lui : {error}")
+        return []
+    print(f"[mcp] {url} : {', '.join(tool.name for tool in tools)}")
+    return tools
+
+
 def build_toolbox() -> Toolbox:
-    """Gather the tools the agent can use."""
-    return Toolbox([weather_tool(), policy_tool(), *file_tools(OUTPUT_DIR)])
+    """Gather the tools the agent can use, local first, then remote."""
+    return Toolbox([weather_tool(), policy_tool(), *file_tools(OUTPUT_DIR), *remote_tools()])
 
 
 def describe(result: AgentResult) -> str:
