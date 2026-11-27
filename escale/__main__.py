@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from escale.assistant import describe, run_task
 from escale.chat import run_chat
 from escale.check import OVER, check_note, format_finding
+from escale.config import EFFORTS
 from escale.llm import cost_line, send, text_of, with_retry
 
 
@@ -22,6 +23,8 @@ def main() -> int:
     commands.add_parser("chat", help="Discuter tour à tour")
     agent = commands.add_parser("agent", help="Confier une tâche à l'agent")
     agent.add_argument("task")
+    agent.add_argument("--effort", choices=EFFORTS, help="Effort de réflexion (défaut : high)")
+    agent.add_argument("--budget", type=float, help="Budget maximal de la tâche en USD")
     check = commands.add_parser("check", help="Vérifier une note de frais sur la politique")
     check.add_argument("file", help="Note de frais au format Markdown")
     args = parser.parse_args()
@@ -38,9 +41,12 @@ def main() -> int:
             print(text_of(response))
             print(f"[stop_reason={response.stop_reason}, {cost_line(response)}]")
         elif args.command == "agent":
-            result = run_task(client, args.task)
+            result = run_task(client, args.task, effort=args.effort, budget_usd=args.budget)
             print(f"\n{describe(result)}")
-            print(f"[{result.iterations} tours, fin : {result.stop_reason}]")
+            print(
+                f"[{result.iterations} tours, fin : {result.stop_reason}, "
+                f"coût {result.cost_usd:.4f} $]"
+            )
             return 0 if result.is_complete else 1
         elif args.command == "check":
             with open(args.file, encoding="utf-8") as note:

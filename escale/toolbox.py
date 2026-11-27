@@ -18,6 +18,8 @@ class Tool:
     definition: dict
     handler: Callable[[dict], str]
     source: str = "local"
+    # An action nobody can undo: the agent asks a human before it runs.
+    needs_confirmation: bool = False
 
     @property
     def name(self) -> str:
@@ -52,6 +54,11 @@ class Toolbox:
         """Tell where a tool comes from, for the trace."""
         tool = self.tools.get(name)
         return tool.source if tool else "inconnu"
+
+    def needs_confirmation(self, name: str) -> bool:
+        """Tell whether a human must approve a call to this tool."""
+        tool = self.tools.get(name)
+        return bool(tool and tool.needs_confirmation)
 
     def run(self, name: str, tool_input: dict) -> tuple[str, bool]:
         """Run a tool and return `(content, is_error)`. A failing tool never stops the agent."""

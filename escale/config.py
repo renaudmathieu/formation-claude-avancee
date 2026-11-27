@@ -26,6 +26,11 @@ PRICES = {
 CACHE_READ_FACTOR = 0.1
 CACHE_WRITE_FACTOR = 1.25
 
+# Agent guards. Both can be changed per run (arguments) or per machine (environment).
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+DEFAULT_EFFORT = "high"
+DEFAULT_BUDGET_USD = 0.50
+
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data" / "politique-voyage"
 
@@ -33,6 +38,20 @@ DATA_DIR = ROOT / "data" / "politique-voyage"
 def default_model() -> str:
     """Return the working model: `ESCALE_MODEL` if set, else MODEL_DEFAULT."""
     return os.environ.get("ESCALE_MODEL") or MODEL_DEFAULT
+
+
+def agent_effort() -> str:
+    """Return the effort of the agent: `ESCALE_EFFORT` if set, else DEFAULT_EFFORT."""
+    effort = os.environ.get("ESCALE_EFFORT") or DEFAULT_EFFORT
+    if effort not in EFFORTS:
+        raise ValueError(f"Effort inconnu : {effort}. Valeurs possibles : {', '.join(EFFORTS)}.")
+    return effort
+
+
+def agent_budget() -> float:
+    """Return the budget of one agent run in USD: `ESCALE_BUDGET_USD` if set, else the default."""
+    raw = os.environ.get("ESCALE_BUDGET_USD")
+    return float(raw) if raw else DEFAULT_BUDGET_USD
 
 
 def cost_usd(model: str, usage) -> float:
