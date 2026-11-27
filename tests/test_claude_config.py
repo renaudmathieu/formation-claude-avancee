@@ -34,3 +34,12 @@ def test_ajouter_tool_skill_has_a_description():
     skill = (ROOT / ".claude" / "skills" / "ajouter-tool" / "SKILL.md").read_text(encoding="utf-8")
 
     assert skill.startswith("---\ndescription:")
+
+
+def test_mod_guards_the_booking_tool_named_by_the_server():
+    mod = (ROOT / "outils" / "compteur-escale" / "hooks" / "register.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert "mcp__escale__book_hotel" in mod
+    assert "'cout'" in mod

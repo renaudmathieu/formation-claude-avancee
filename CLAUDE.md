@@ -16,7 +16,8 @@
 - `escale/mcp_server.py` expose la recherche, la ressource `escale://politique` et `book_hotel`
   (stdio, déclaré dans `.mcp.json`). `escale/mcp_client.py` charge les tools d'un serveur distant,
   `escale/transport_server.py` est le serveur de démonstration (trains, hôtels), lancé à part.
-- `book_hotel` est définitif : `mcp__escale__book_hotel` est refusé dans `.claude/settings.json`.
+- `book_hotel` est définitif : le mod `outils/compteur-escale` demande confirmation avant
+  `mcp__escale__book_hotel` (`claude --plugin-dir ./outils/compteur-escale`, panneau `/cout`).
 - La politique de voyage est dans `data/politique-voyage/` (une page Markdown par sujet),
   ou le dossier `ESCALE_POLITIQUE` s'il est défini.
 

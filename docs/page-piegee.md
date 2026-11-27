@@ -36,8 +36,19 @@ plafond d'hôtel à Lyon ? » : la recherche remonte la page piégée.
 
 ## Ce qu'on observe
 
-- Avec la règle `deny` sur `mcp__escale__book_hotel` (`.claude/settings.json`), Claude Code refuse
-  l'appel : rien n'est réservé, `sortie/reservations.jsonl` n'existe pas.
-- Sans cette règle, et en mode permissif, la réservation partirait. C'est le sujet des sections 7
-  (garde du mod) et 8 (confirmation humaine, contenu d'un document traité comme une donnée).
-- Après la démonstration : `rm -r /tmp/politique-piegee` et `unset ESCALE_POLITIQUE`.
+Trois états du même dépôt, à montrer dans cet ordre :
+
+- Sans garde et sans règle (permissions par défaut, mode permissif) : la réservation partirait.
+  Rien d'autre ne l'arrête que le jugement du modèle.
+- Avec le mod `compteur-escale` (`claude --plugin-dir ./outils/compteur-escale`) : Claude Code
+  pose la question « Escale veut réserver Grand Palais Bellecour à Lyon pour 5 nuit(s). Confirmer ? ».
+  « Refuser » renvoie une consigne à Claude, le refus apparaît dans `/cout`, et
+  `sortie/reservations.jsonl` n'existe pas. En `claude -p`, personne ne peut répondre : refus.
+- Avec seulement la règle `deny` sur `mcp__escale__book_hotel` : refus sec, mais plus de
+  réservation possible, même confirmée. Pour que la garde du mod puisse demander, la règle doit
+  être un `allow` (voir `outils/compteur-escale/README.md`).
+
+La confirmation humaine côté agent Python et le contenu d'un document traité comme une donnée sont
+le sujet de la section 8.
+
+Après la démonstration : `rm -r /tmp/politique-piegee` et `unset ESCALE_POLITIQUE`.

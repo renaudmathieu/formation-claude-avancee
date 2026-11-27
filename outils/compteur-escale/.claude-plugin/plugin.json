@@ -1,0 +1,7 @@
+{
+  "name": "compteur-escale",
+  "version": "0.1.0",
+  "description": "Compte les tokens de chaque tour, les affiche dans un panneau (/cout) et demande confirmation avant book_hotel du serveur MCP Escale",
+  "author": { "name": "Formation Claude Avancé" },
+  "types": "./types/index.d.ts"
+}

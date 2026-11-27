@@ -112,7 +112,7 @@ def test_booking_is_marked_as_destructive(server):
     assert tools["search_travel_policy"].annotations.read_only_hint is True
 
 
-def test_claude_code_config_registers_the_server_and_denies_the_booking():
+def test_claude_code_config_registers_the_server_and_governs_the_booking():
     from pathlib import Path
 
     root = Path(__file__).resolve().parent.parent
@@ -120,4 +120,7 @@ def test_claude_code_config_registers_the_server_and_denies_the_booking():
     settings = json.loads((root / ".claude" / "settings.json").read_text(encoding="utf-8"))
 
     assert mcp_config["mcpServers"]["escale"]["args"][-1] == "escale.mcp_server"
-    assert "mcp__escale__book_hotel" in settings["permissions"]["deny"]
+    # The booking has exactly one permission rule: `deny` (section 6) or `allow` (section 7, where
+    # the mod asks first and a `deny` would refuse even a confirmed booking).
+    rules = [settings["permissions"]["allow"], settings["permissions"]["deny"]]
+    assert sum("mcp__escale__book_hotel" in rule for rule in rules) == 1
