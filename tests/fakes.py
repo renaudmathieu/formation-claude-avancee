@@ -3,6 +3,9 @@
 import copy
 from types import SimpleNamespace
 
+import anthropic
+import httpx
+
 
 def text(value: str) -> SimpleNamespace:
     return SimpleNamespace(type="text", text=value)
@@ -33,7 +36,9 @@ class FakeClient:
     def __init__(self, *responses):
         self.responses = list(responses)
         self.requests: list[dict] = []
-        self.beta = SimpleNamespace(messages=SimpleNamespace(create=self._create))
+        self.beta = SimpleNamespace(
+            messages=SimpleNamespace(create=self._create, stream=self._stream)
+        )
 
     def _create(self, **request):
         self.requests.append(copy.deepcopy(request))
@@ -41,3 +46,34 @@ class FakeClient:
         if isinstance(next_response, BaseException):
             raise next_response
         return next_response
+
+    def _stream(self, **request):
+        return FakeStream(self._create(**request))
+
+
+class FakeStream:
+    """Stand-in for `client.beta.messages.stream(...)`: a context manager over one response."""
+
+    def __init__(self, final_response):
+        self.final_response = final_response
+        self.text_stream = iter(
+            [block.text for block in final_response.content if block.type == "text"]
+        )
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+    def get_final_message(self):
+        return self.final_response
+
+
+def api_error(error_class, status: int = 500) -> anthropic.APIError:
+    """Build a real SDK exception, as the client would raise it."""
+    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    if error_class is anthropic.APIConnectionError:
+        return error_class(request=request)
+    http_response = httpx.Response(status, request=request)
+    return error_class("erreur de test", response=http_response, body=None)

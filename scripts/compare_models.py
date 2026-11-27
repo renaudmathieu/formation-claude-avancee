@@ -68,7 +68,9 @@ def compare(client, clock=time.perf_counter) -> list[Measure]:
 
 def format_table(rows: list[Measure]) -> str:
     """Return the measures as an aligned text table."""
-    header = f"{'tâche':<15}{'modèle':<20}{'entrée':>8}{'sortie':>8}{'durée (s)':>11}{'coût ($)':>11}"
+    header = (
+        f"{'tâche':<15}{'modèle':<20}{'entrée':>8}{'sortie':>8}{'durée (s)':>11}{'coût ($)':>11}"
+    )
     lines = [header, "-" * len(header)]
     for row in rows:
         lines.append(

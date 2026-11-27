@@ -8,7 +8,7 @@ import anthropic
 from dotenv import load_dotenv
 
 from escale.chat import run_chat
-from escale.llm import send, text_of
+from escale.llm import cost_line, send, text_of, with_retry
 
 
 def main() -> int:
@@ -27,9 +27,10 @@ def main() -> int:
     client = anthropic.Anthropic()
     try:
         if args.command == "ask":
-            response = send(client, [{"role": "user", "content": args.question}])
+            messages = [{"role": "user", "content": args.question}]
+            response = with_retry(lambda: send(client, messages))
             print(text_of(response))
-            print(f"[stop_reason={response.stop_reason}]")
+            print(f"[stop_reason={response.stop_reason}, {cost_line(response)}]")
         else:
             run_chat(client)
     except anthropic.AuthenticationError:

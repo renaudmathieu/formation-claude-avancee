@@ -1,9 +1,9 @@
+import anthropic
 import pytest
 
 from escale import chat
-from tests.fakes import FakeClient, response, text, thinking
+from tests.fakes import FakeClient, api_error, response, text, thinking
 
-pytestmark = pytest.mark.skip(reason="TP 1 : retirer cette ligne pour commencer")
 
 def test_second_turn_sends_the_whole_history():
     client = FakeClient(response(text("Bonjour Camille")), response(text("Camille")))
@@ -69,3 +69,23 @@ def test_interrupted_turn_leaves_the_history_clean():
         chat_session.ask("Et ensuite ?")
 
     assert [message["role"] for message in chat_session.messages] == ["user", "assistant"]
+
+
+def test_third_turn_still_knows_the_first():
+    client = FakeClient(response(text("a")), response(text("b")), response(text("Camille")))
+    conversation = chat.Conversation(client)
+
+    conversation.ask("Je m'appelle Camille")
+    conversation.ask("Je pars à Lyon")
+    conversation.ask("Comment je m'appelle ?")
+
+    sent = client.requests[2]["messages"]
+    assert sent[0]["content"][0]["text"] == "Je m'appelle Camille"
+    assert [message["role"] for message in sent] == ["user", "assistant"] * 2 + ["user"]
+
+
+def test_transient_error_is_retried_inside_a_turn(monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda seconds: None)
+    client = FakeClient(api_error(anthropic.RateLimitError, 429), response(text("Bonjour")))
+
+    assert chat.Conversation(client).ask("Salut") == "Bonjour"
