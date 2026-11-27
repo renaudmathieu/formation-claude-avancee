@@ -81,3 +81,24 @@ def api_error(error_class, status: int = 500) -> anthropic.APIError:
         return error_class(request=request)
     http_response = httpx.Response(status, request=request)
     return error_class("erreur de test", response=http_response, body=None)
+
+
+# Words that mean the same thing share an axis, so that the fake embedder "understands" synonyms.
+CONCEPTS = [
+    ("voiture", "vehicule", "automobile"),
+    ("amende", "amendes", "contravention", "pv"),
+    ("avion", "vol"),
+    ("hotel", "chambre"),
+    ("repas", "dejeuner", "diner"),
+]
+
+
+def concept_embedder(texts: list[str], input_type: str = "document") -> list[list[float]]:
+    """A deterministic stand-in for Voyage: one axis per concept, no network."""
+    from escale.rag import tokens
+
+    vectors = []
+    for text in texts:
+        words = tokens(text)
+        vectors.append([0.01 + sum(words.count(w) for w in group) for group in CONCEPTS])
+    return vectors

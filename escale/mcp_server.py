@@ -3,7 +3,7 @@
 Run it with `uv run python -m escale.mcp_server` (stdio). The server name is part of the tool
 names seen by Claude Code (`mcp__escale__book_hotel`): changing it breaks the permission rules.
 
-It is a thin facade: the search is the one of section 4, the booking is `tools/booking.py`.
+It is a thin facade: the search is the one of the agent (sections 4 and 9), the booking is `tools/booking.py`.
 """
 
 import json
@@ -50,8 +50,8 @@ def create_server(reservations: Path = booking.RESERVATIONS_FILE) -> MCPServer:
         limit: Annotated[int, Field(ge=1, le=10, description="Nombre maximal de passages.")] = 5,
     ) -> str:
         log.info("search_travel_policy query=%r", query)
-        # `policy.search` is called through the module: the same code as the agent, not a copy.
-        results = policy.search(query, limit)
+        # `policy.lookup` is called through the module: the same code as the agent, not a copy.
+        results = policy.lookup(query, limit)
         if not results:
             return "Aucun passage de la politique ne correspond à cette recherche."
         return json.dumps(results, ensure_ascii=False)

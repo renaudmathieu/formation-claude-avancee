@@ -43,14 +43,14 @@ def test_server_exposes_the_two_tools(server):
     assert tools["search_travel_policy"].description == policy.POLICY_TOOL["description"]
 
 
-def test_search_is_a_facade_over_the_section_4_code(server, monkeypatch):
+def test_search_is_a_facade_over_the_agent_search(server, monkeypatch):
     calls = []
 
     def spy(query, limit=5):
         calls.append((query, limit))
         return [{"page": "espion", "excerpt": "Trouvé par l'espion."}]
 
-    monkeypatch.setattr(policy, "search", spy)
+    monkeypatch.setattr(policy, "lookup", spy)
 
     result = call(server, "search_travel_policy", {"query": "plafond", "limit": 3})
 
@@ -84,7 +84,8 @@ def test_resource_lists_the_policy_pages(server):
     reply = with_client(server, lambda client: client.read_resource("escale://politique"))
 
     pages = json.loads("".join(content.text for content in reply.contents))
-    assert pages == ["hebergement", "notes-de-frais", "repas", "transport"]
+    assert pages == sorted(page.stem for page in policy.pages())
+    assert {"hebergement", "transport", "securite"} <= set(pages)
 
 
 def test_booking_appends_one_line_to_the_reservations_file(server, tmp_path):

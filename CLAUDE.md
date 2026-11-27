@@ -19,6 +19,9 @@
   `escale/transport_server.py` est le serveur de démonstration (trains, hôtels), lancé à part.
 - `book_hotel` est définitif : le mod `outils/compteur-escale` demande confirmation avant
   `mcp__escale__book_hotel` (`claude --plugin-dir ./outils/compteur-escale`, panneau `/cout`).
+- `escale/rag.py` cherche dans la politique (BM25 + embeddings Voyage, fusion RRF) et répond avec
+  des citations vérifiées par le code. Sans `VOYAGE_API_KEY`, la recherche est par mots-clés seuls.
+  Mesure : `uv run python -m evals.run_rag`. `check` garde la recherche simple `policy.search`.
 - La politique de voyage est dans `data/politique-voyage/` (une page Markdown par sujet),
   ou le dossier `ESCALE_POLITIQUE` s'il est défini.
 

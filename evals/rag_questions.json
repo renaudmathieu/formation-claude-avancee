@@ -1,0 +1,29 @@
+{
+  "description": "Jeu d'évaluation de la recherche dans data/politique-voyage/. Pour chaque question, la page qui contient la réponse. Une page à null signifie que la réponse n'est pas dans la politique : Escale doit refuser de répondre au lieu d'inventer.",
+  "questions": [
+    {"id": "q01", "question": "Quel est le plafond d'une nuit d'hôtel à Paris ?", "page": "hebergement", "category": "mots du document"},
+    {"id": "q02", "question": "Puis-je dormir sur place si mon premier rendez-vous est à 9 h et que le trajet dure deux heures ?", "page": "hebergement", "category": "paraphrase"},
+    {"id": "q03", "question": "Combien puis-je dépenser pour un dîner en déplacement en France ?", "page": "repas", "category": "paraphrase"},
+    {"id": "q04", "question": "Quel est le montant maximal d'un repas avec un client ?", "page": "repas", "category": "mots du document"},
+    {"id": "q05", "question": "À quelles heures un taxi est-il remboursé ?", "page": "transport", "category": "mots du document"},
+    {"id": "q06", "question": "Ai-je le droit de voyager en première classe ?", "page": "transport", "category": "paraphrase"},
+    {"id": "q07", "question": "Dans quel délai dois-je déposer ma note de frais après mon retour ?", "page": "notes-de-frais", "category": "mots du document"},
+    {"id": "q08", "question": "À partir de quel montant un justificatif est-il obligatoire ?", "page": "notes-de-frais", "category": "mots du document"},
+    {"id": "q09", "question": "Combien de jours à l'avance faut-il réserver un billet d'avion ?", "page": "avion", "category": "mots du document"},
+    {"id": "q10", "question": "Mon bagage en soute sera-t-il remboursé pour un séjour de deux nuits ?", "page": "avion", "category": "paraphrase"},
+    {"id": "q11", "question": "Que faire si mon vol est annulé au dernier moment ?", "page": "avion", "category": "paraphrase"},
+    {"id": "q12", "question": "Combien de jours avant le départ faut-il demander une mission hors de l'Union européenne ?", "page": "missions-etranger", "category": "mots du document"},
+    {"id": "q13", "question": "De combien est le forfait journalier de repas hors d'Europe ?", "page": "missions-etranger", "category": "mots du document"},
+    {"id": "q14", "question": "Combien de temps mon passeport doit-il rester valide après mon retour ?", "page": "missions-etranger", "category": "mots du document"},
+    {"id": "q15", "question": "Quelle catégorie de voiture de location puis-je choisir ?", "page": "location-voiture", "category": "mots du document"},
+    {"id": "q16", "question": "Qui règle une contravention ?", "page": "location-voiture", "category": "paraphrase", "note": "La page dit amende, la question dit contravention, et pas de voiture dans la question."},
+    {"id": "q17", "question": "Combien me rembourse-t-on par kilomètre si j'utilise ma propre voiture ?", "page": "indemnites-kilometriques", "category": "paraphrase"},
+    {"id": "q18", "question": "Que gagne-t-on à partager son véhicule avec des collègues ?", "page": "indemnites-kilometriques", "category": "paraphrase"},
+    {"id": "q19", "question": "Quel budget par personne prévoir pour un séminaire interne ?", "page": "seminaires", "category": "mots du document"},
+    {"id": "q20", "question": "Peut-on louer une salle externe pour un séminaire de dix personnes ?", "page": "seminaires", "category": "paraphrase"},
+    {"id": "q21", "question": "Que prévoit la procédure SEC-14 ?", "page": "securite", "category": "référence exacte", "note": "Le code SEC-14 n'a aucun sens pour un modèle d'embeddings : seuls les mots-clés le retrouvent."},
+    {"id": "q22", "question": "Comment protéger mes données quand je travaille dans un café ?", "page": "securite", "category": "paraphrase"},
+    {"id": "q23", "question": "Serai-je facturé si je renonce à un hôtel la veille du départ ?", "page": "reservations", "category": "paraphrase"},
+    {"id": "q24", "question": "Quelle est la politique de télétravail de l'entreprise ?", "page": null, "category": "hors corpus", "note": "Aucune page ne parle de télétravail : la bonne réponse est un refus."}
+  ]
+}

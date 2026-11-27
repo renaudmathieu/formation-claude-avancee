@@ -1,4 +1,8 @@
-"""Keyword search in the travel policy pages (Markdown files, one section per `##` title)."""
+"""Search in the travel policy pages (Markdown files, one section per `##` title).
+
+`search` counts shared words: simple, predictable, used by `check`. `lookup` is the search of the
+agent and of the MCP server: keywords and meaning together (see `escale/rag.py`).
+"""
 
 import json
 import os
@@ -6,6 +10,7 @@ import re
 import unicodedata
 from pathlib import Path
 
+from escale import rag
 from escale.config import DATA_DIR
 from escale.toolbox import Tool
 
@@ -53,9 +58,17 @@ def search(query: str, limit: int = 5) -> list[dict]:
     return [result for _, result in scored[: max(1, min(limit, MAX_LIMIT))]]
 
 
+def lookup(query: str, limit: int = 5, embedder=None) -> list[dict]:
+    """Hybrid search (BM25 + embeddings, RRF). Without a Voyage key it is BM25 alone.
+
+    Each result is {"page", "section", "excerpt"}. `limit` is bounded like in `search`.
+    """
+    return rag.search_policy(query, max(1, min(limit, MAX_LIMIT)), policy_dir(), embedder)
+
+
 def run_policy_tool(tool_input: dict) -> str:
     """Execute a `search_travel_policy` call and return its result as JSON text."""
-    results = search(tool_input["query"])
+    results = lookup(tool_input["query"])
     if not results:
         # An empty search is an answer, not a failure: Claude must say "nothing found".
         return "Aucun passage de la politique ne correspond à cette recherche."
@@ -65,8 +78,9 @@ def run_policy_tool(tool_input: dict) -> str:
 POLICY_TOOL = {
     "name": "search_travel_policy",
     "description": (
-        "Cherche par mots-clés dans la politique de voyage de l'entreprise : plafonds d'hôtel et "
-        "de repas, classe de train, avion, taxi, notes de frais. Cette politique est propre à "
+        "Cherche dans la politique de voyage de l'entreprise : plafonds d'hôtel et "
+        "de repas, classe de train, avion, taxi, voiture, étranger, séminaires, sécurité, notes de "
+        "frais. Cette politique est propre à "
         "l'entreprise : utilise cet outil avant de citer une règle ou un montant, et cite la "
         "page utilisée. Renvoie les passages les plus pertinents, chacun avec le nom de sa page "
         "et un extrait."
@@ -77,7 +91,7 @@ POLICY_TOOL = {
         "properties": {
             "query": {
                 "type": "string",
-                "description": "Mots-clés en français, par exemple : plafond hôtel Paris.",
+                "description": "Question ou mots-clés en français, par exemple : plafond hôtel Paris.",
             },
         },
         "required": ["query"],
