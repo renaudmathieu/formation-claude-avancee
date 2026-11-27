@@ -21,8 +21,8 @@ from dataclasses import dataclass, field, replace
 from functools import cache
 from pathlib import Path
 
-from escale.config import MODEL_FAST
-from escale.llm import send, text_of, with_retry
+from escale.config import ANSWER_MAX_TOKENS, MODEL_FAST
+from escale.llm import cached_text, send, text_of, with_retry
 
 log = logging.getLogger("escale.rag")
 
@@ -467,7 +467,10 @@ def answer(client, index: PolicyIndex, question: str, limit: int = 5) -> Answer:
     # The passages first, the question last, closest to the answer.
     content = f"{format_passages(chunks)}\n\nQuestion : {question}"
     messages = [{"role": "user", "content": content}]
-    response = with_retry(lambda: send(client, messages, system=SYSTEM))
+    system = cached_text(SYSTEM)
+    response = with_retry(
+        lambda: send(client, messages, system=system, max_tokens=ANSWER_MAX_TOKENS)
+    )
     text = text_of(response)
     valid, fake = verify_citations(extract_citations(text), chunks)
     return Answer(text, chunks, valid, fake, refused=is_refusal(text))

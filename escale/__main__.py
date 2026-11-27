@@ -10,8 +10,11 @@ from dotenv import load_dotenv
 from escale.assistant import describe, run_task
 from escale.chat import run_chat
 from escale.check import OVER, check_note, format_finding
-from escale.config import EFFORTS
+from escale.config import EFFORTS, current_user, daily_quota
 from escale.llm import cost_line, send, text_of, with_retry
+from escale.prompts import load_prompt
+from escale.quota import Quota, QuotaExceededError
+from escale.trace import TRACE_PATH, TracedClient
 
 
 def main() -> int:
@@ -33,7 +36,14 @@ def main() -> int:
         print("ANTHROPIC_API_KEY manquante : la renseigner dans .env.", file=sys.stderr)
         return 1
 
-    client = anthropic.Anthropic()
+    # Every call goes through the tracer: one JSON line each, and the daily quota of the user.
+    prompt = load_prompt("assistant").label if args.command == "agent" else "none"
+    client = TracedClient(
+        anthropic.Anthropic(),
+        prompt_version=prompt,
+        quota=Quota(TRACE_PATH, daily_quota()),
+        user=current_user(),
+    )
     try:
         if args.command == "ask":
             messages = [{"role": "user", "content": args.question}]
@@ -58,6 +68,9 @@ def main() -> int:
             return 1 if any(finding.verdict == OVER for finding in findings) else 0
         else:
             run_chat(client)
+    except QuotaExceededError as error:
+        print(error, file=sys.stderr)
+        return 1
     except anthropic.AuthenticationError:
         print("Clé API refusée : vérifiez ANTHROPIC_API_KEY dans .env.", file=sys.stderr)
         return 1

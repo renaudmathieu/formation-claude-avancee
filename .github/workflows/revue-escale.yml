@@ -1,0 +1,53 @@
+# Headless review of every pull request: Claude Code reads the diff and checks it against
+# the business rules of CLAUDE.md. Read-only tools, bounded in turns and in dollars.
+# The key comes from the repository secret ANTHROPIC_API_KEY, never from the code.
+name: Revue Escale
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  revue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Claude Code
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Review the diff
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          claude -p "Relis le diff entre $BASE et HEAD (git diff $BASE...HEAD). \
+          Vérifie-le contre les règles métier et les conventions de CLAUDE.md. \
+          Réponds en Markdown : une ligne par problème, avec fichier et ligne, \
+          ou « Rien à signaler »." \
+            --output-format json \
+            --permission-mode dontAsk \
+            --allowedTools "Read,Glob,Grep,Bash(git diff *)" \
+            --max-turns 8 \
+            --max-budget-usd 0.50 \
+            > revue.json
+
+      - name: Publish the review and its cost
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          jq -r '.result' revue.json > revue.md
+          jq -r '"\n---\nRevue headless : \(.num_turns) tours, coût \(.total_cost_usd) $"' \
+            revue.json >> revue.md
+          cat revue.md >> "$GITHUB_STEP_SUMMARY"
+          gh pr comment "$PR" --body-file revue.md
+          test "$(jq -r '.is_error' revue.json)" = "false"

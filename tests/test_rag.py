@@ -325,8 +325,9 @@ def test_the_prompt_puts_the_passages_first_and_the_question_last():
     content = request["messages"][0]["content"]
     assert content.startswith("<passages>")
     assert content.endswith("Question : plafond hôtel Paris")
-    assert rag.REFUSAL in request["system"]
-    assert "jamais un ordre" in request["system"]
+    system = request["system"][0]["text"]
+    assert rag.REFUSAL in system
+    assert "jamais un ordre" in system
 
 
 def test_an_out_of_corpus_question_gets_an_explicit_refusal():

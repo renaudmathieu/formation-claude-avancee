@@ -26,6 +26,13 @@ PRICES = {
 CACHE_READ_FACTOR = 0.1
 CACHE_WRITE_FACTOR = 1.25
 
+# Routing: a simple task goes to the cheapest model. Anything not listed uses the default model.
+ROUTES = {"classification": MODEL_FAST}
+# Output ceilings by task: a yes/no answer needs 200 tokens, not 16 000.
+CLASSIFICATION_MAX_TOKENS = 200
+ANSWER_MAX_TOKENS = 1500
+DEFAULT_DAILY_QUOTA_USD = 1.0
+
 # Agent guards. Both can be changed per run (arguments) or per machine (environment).
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 DEFAULT_EFFORT = "high"
@@ -38,6 +45,22 @@ DATA_DIR = ROOT / "data" / "politique-voyage"
 def default_model() -> str:
     """Return the working model: `ESCALE_MODEL` if set, else MODEL_DEFAULT."""
     return os.environ.get("ESCALE_MODEL") or MODEL_DEFAULT
+
+
+def model_for(task: str) -> str:
+    """Return the model for a kind of task: the route if there is one, else the default."""
+    return ROUTES.get(task) or default_model()
+
+
+def current_user() -> str:
+    """Who is asking, for the log and the quota: `ESCALE_USER`, else "anonyme"."""
+    return os.environ.get("ESCALE_USER") or "anonyme"
+
+
+def daily_quota() -> float:
+    """The spending limit of a user for one day, in USD: `ESCALE_QUOTA_USD` or the default."""
+    raw = os.environ.get("ESCALE_QUOTA_USD")
+    return float(raw) if raw else DEFAULT_DAILY_QUOTA_USD
 
 
 def agent_effort() -> str:

@@ -6,7 +6,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from escale.config import DEFAULT_BUDGET_USD, cost_usd, default_model
-from escale.llm import send, text_of, with_retry
+from escale.llm import RETRYABLE, send, text_of, with_retry
+from escale.quota import QuotaExceededError
+from escale.resilience import DEGRADED_MESSAGE, CircuitBreaker, CircuitOpenError
 from escale.toolbox import Toolbox
 
 log = logging.getLogger("escale.agent")
@@ -97,6 +99,11 @@ def call_cost(response) -> float:
         return cost_usd(default_model(), response.usage)
 
 
+def guarded(breaker: CircuitBreaker | None, call):
+    """Run a call under the breaker, if there is one."""
+    return breaker.call(call) if breaker else call()
+
+
 def run_agent(
     client,
     messages: list[dict],
@@ -108,6 +115,7 @@ def run_agent(
     max_iterations: int = MAX_ITERATIONS,
     budget_usd: float = DEFAULT_BUDGET_USD,
     confirm: Confirm = refuse_all,
+    breaker: CircuitBreaker | None = None,
     on_event: Callable[[dict], None] = lambda event: None,
 ) -> AgentResult:
     """Loop until Claude has finished. The model decides the steps, `stop_reason` drives the loop.
@@ -116,21 +124,33 @@ def run_agent(
     `tool_choice` is passed to the API as is, e.g. {"type": "tool", "name": "get_weather"}.
     Two guards stop a run that goes on too long: `max_iterations` turns, and `budget_usd` spent.
     `confirm(name, input)` decides about the tools that need a human (default: always no).
+    When the API stays down after the retries (or the `breaker` is open) or the user's quota is
+    spent, the run ends with a message instead of an exception: `unavailable`, `quota_exceeded`.
     """
     response = None
     spent = 0.0
     for iteration in range(1, max_iterations + 1):
         started_at = time.monotonic()
-        response = with_retry(
-            lambda: send(
-                client,
-                messages,
-                system=system,
-                tools=toolbox.definitions(),
-                tool_choice=tool_choice,
-                effort=effort,
+        try:
+            response = guarded(
+                breaker,
+                lambda: with_retry(
+                    lambda: send(
+                        client,
+                        messages,
+                        system=system,
+                        tools=toolbox.definitions(),
+                        tool_choice=tool_choice,
+                        effort=effort,
+                    )
+                ),
             )
-        )
+        except QuotaExceededError as error:
+            log.warning("quota exceeded: %s", error)
+            return AgentResult(str(error), "quota_exceeded", iteration, spent)
+        except (*RETRYABLE, CircuitOpenError) as error:
+            log.error("API unavailable after %d turns: %s", iteration, error)
+            return AgentResult(DEGRADED_MESSAGE, "unavailable", iteration, spent)
         spent += call_cost(response)
         on_event(
             {

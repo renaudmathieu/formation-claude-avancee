@@ -10,7 +10,13 @@ from pathlib import Path
 
 import anthropic
 
-from escale.config import MAX_TOKENS, cost_usd, default_model
+from escale.config import (
+    CLASSIFICATION_MAX_TOKENS,
+    MAX_TOKENS,
+    cost_usd,
+    default_model,
+    model_for,
+)
 
 # Beta needed by `fallbacks="default"`: a declined request is retried on another model.
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
@@ -37,19 +43,38 @@ RETRYABLE = (
 )
 
 
+def cached_text(text: str) -> list[dict]:
+    """A system prompt as one block marked for the prompt cache.
+
+    A cache hit costs 0.1x the input price, a cache write 1.25x. The prompt must be identical
+    from one call to the next: put what changes (the date, the user) in a later block.
+    """
+    return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
+
+
 def build_request(
-    messages, *, system=None, tools=None, tool_choice=None, effort="low", model=None, schema=None
+    messages,
+    *,
+    system=None,
+    tools=None,
+    tool_choice=None,
+    effort="low",
+    model=None,
+    schema=None,
+    max_tokens=None,
+    thinking=True,
 ) -> dict:
     """Build the parameters shared by `send` and `stream`."""
     request = {
         "model": model or default_model(),
-        "max_tokens": MAX_TOKENS,
+        "max_tokens": max_tokens or MAX_TOKENS,
         "messages": messages,
-        "thinking": {"type": "adaptive", "display": "summarized"},
         "output_config": {"effort": effort},
         "fallbacks": "default",
         "betas": [FALLBACK_BETA],
     }
+    if thinking:
+        request["thinking"] = {"type": "adaptive", "display": "summarized"}
     if schema:
         # Structured outputs: the answer is guaranteed to follow this JSON schema.
         request["output_config"]["format"] = {"type": "json_schema", "schema": schema}
@@ -72,6 +97,8 @@ def send(
     effort="low",
     model=None,
     schema=None,
+    max_tokens=None,
+    thinking=True,
 ):
     """Send the conversation to Claude and return the response.
 
@@ -86,6 +113,8 @@ def send(
         effort=effort,
         model=model,
         schema=schema,
+        max_tokens=max_tokens,
+        thinking=thinking,
     )
     return client.beta.messages.create(**request)
 
@@ -160,6 +189,25 @@ def read_ticket(client, path: str) -> dict:
     if missing:
         raise ValueError(f"Champs manquants : {', '.join(sorted(missing))}")
     return ticket
+
+
+def is_refund_request(client, message: str) -> bool:
+    """Classify a message. A yes/no question does not need a big model: it is routed to the fast one."""
+    question = (
+        "Ce message est-il une demande de remboursement ? Réponds uniquement par oui ou non.\n\n"
+        f"Message : {message}"
+    )
+    messages = [{"role": "user", "content": question}]
+    response = with_retry(
+        lambda: send(
+            client,
+            messages,
+            model=model_for("classification"),
+            max_tokens=CLASSIFICATION_MAX_TOKENS,
+            thinking=False,
+        )
+    )
+    return text_of(response).strip().lower().startswith("oui")
 
 
 def cost_line(response) -> str:

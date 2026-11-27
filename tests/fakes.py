@@ -74,13 +74,15 @@ class FakeStream:
         return self.final_response
 
 
-def api_error(error_class, status: int = 500) -> anthropic.APIError:
+def api_error(
+    error_class, status: int = 500, message: str = "erreur de test"
+) -> anthropic.APIError:
     """Build a real SDK exception, as the client would raise it."""
     request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
     if error_class is anthropic.APIConnectionError:
         return error_class(request=request)
     http_response = httpx.Response(status, request=request)
-    return error_class("erreur de test", response=http_response, body=None)
+    return error_class(message, response=http_response, body=None)
 
 
 # Words that mean the same thing share an axis, so that the fake embedder "understands" synonyms.

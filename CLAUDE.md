@@ -22,6 +22,9 @@
 - `escale/rag.py` cherche dans la politique (BM25 + embeddings Voyage, fusion RRF) et répond avec
   des citations vérifiées par le code. Sans `VOYAGE_API_KEY`, la recherche est par mots-clés seuls.
   Mesure : `uv run python -m evals.run_rag`. `check` garde la recherche simple `policy.search`.
+- `escale/trace.py` : chaque appel API = une ligne JSON dans `.escale/trace.jsonl` (jamais de prompt ni
+  de clé). Coût par question : `uv run python -m scripts.cout_par_question`. Quota : `escale/quota.py`.
+- Les prompts sont versionnés dans `prompts/` (`assistant.v1.md`) : on ajoute une version, on n'édite pas.
 - La politique de voyage est dans `data/politique-voyage/` (une page Markdown par sujet),
   ou le dossier `ESCALE_POLITIQUE` s'il est défini.
 
