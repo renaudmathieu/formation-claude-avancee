@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from escale.assistant import describe, run_task
 from escale.chat import run_chat
+from escale.check import OVER, check_note, format_finding
 from escale.llm import cost_line, send, text_of, with_retry
 
 
@@ -21,6 +22,8 @@ def main() -> int:
     commands.add_parser("chat", help="Discuter tour à tour")
     agent = commands.add_parser("agent", help="Confier une tâche à l'agent")
     agent.add_argument("task")
+    check = commands.add_parser("check", help="Vérifier une note de frais sur la politique")
+    check.add_argument("file", help="Note de frais au format Markdown")
     args = parser.parse_args()
 
     if not os.environ.get("ANTHROPIC_API_KEY"):
@@ -39,6 +42,14 @@ def main() -> int:
             print(f"\n{describe(result)}")
             print(f"[{result.iterations} tours, fin : {result.stop_reason}]")
             return 0 if result.is_complete else 1
+        elif args.command == "check":
+            with open(args.file, encoding="utf-8") as note:
+                findings = check_note(client, note.read())
+            if not findings:
+                print("Aucune dépense lisible dans cette note.")
+            for finding in findings:
+                print(format_finding(finding))
+            return 1 if any(finding.verdict == OVER for finding in findings) else 0
         else:
             run_chat(client)
     except anthropic.AuthenticationError:
