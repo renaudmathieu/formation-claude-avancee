@@ -1,0 +1,70 @@
+{
+  "description": "Résultat attendu de l'extraction pour chaque justificatif de data/justificatifs/, écrit à la main en relisant chaque fichier. Une dépense = une ligne de catégorie différente sur le justificatif ; la taxe de séjour fait partie de l'hôtel ; un montant illisible donne une liste vide.",
+  "cas": [
+    {
+      "justificatif": "01-hotel-lyon",
+      "note": "La taxe de séjour s'ajoute au prix de la chambre : 130,30 €.",
+      "attendu": [
+        {"date": "2026-11-18", "category": "hotel", "amount_eur": 130.30, "vendor": "Hôtel des Cordeliers"}
+      ]
+    },
+    {
+      "justificatif": "02-train-paris-lyon",
+      "attendu": [
+        {"date": "2026-11-17", "category": "train", "amount_eur": 62.00, "vendor": "Rail Fictif"}
+      ]
+    },
+    {
+      "justificatif": "03-taxi-nuit",
+      "attendu": [
+        {"date": "2026-11-18", "category": "taxi", "amount_eur": 28.50, "vendor": "Taxis Bleus Lyon"}
+      ]
+    },
+    {
+      "justificatif": "04-restaurant-client",
+      "note": "Le total est 92,40 €, pas le prix du seul menu.",
+      "attendu": [
+        {"date": "2026-11-18", "category": "restaurant", "amount_eur": 92.40, "vendor": "Brasserie du Pont"}
+      ]
+    },
+    {
+      "justificatif": "05-train-retour",
+      "attendu": [
+        {"date": "2026-11-19", "category": "train", "amount_eur": 58.50, "vendor": "Rail Fictif"}
+      ]
+    },
+    {
+      "justificatif": "06-hotel-et-diner",
+      "note": "Piège : une facture, deux catégories, donc deux dépenses.",
+      "attendu": [
+        {"date": "2026-11-24", "category": "hotel", "amount_eur": 142.00, "vendor": "Hôtel Le Quai"},
+        {"date": "2026-11-24", "category": "restaurant", "amount_eur": 31.00, "vendor": "Hôtel Le Quai"}
+      ]
+    },
+    {
+      "justificatif": "07-vtc-gare",
+      "attendu": [
+        {"date": "2026-11-20", "category": "taxi", "amount_eur": 18.90, "vendor": "VTC Lumo"}
+      ]
+    },
+    {
+      "justificatif": "08-restaurant-dejeuner",
+      "note": "Les lignes ne sont pas des dépenses : seul le total (23,50 €) compte.",
+      "attendu": [
+        {"date": "2026-11-25", "category": "restaurant", "amount_eur": 23.50, "vendor": "Café de la Gare"}
+      ]
+    },
+    {
+      "justificatif": "09-taxi-illisible",
+      "note": "Piège : montant illisible, rien à inventer.",
+      "attendu": []
+    },
+    {
+      "justificatif": "10-diner-leon",
+      "note": "Date écrite en toutes lettres.",
+      "attendu": [
+        {"date": "2026-11-17", "category": "restaurant", "amount_eur": 34.80, "vendor": "Chez Léon"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+Lis ce justificatif de frais de déplacement et donne la liste des dépenses : la date, la catégorie (hotel, train, taxi, restaurant ou other), le montant en euros et le fournisseur. S'il n'y a pas de montant lisible, ne donne aucune dépense.

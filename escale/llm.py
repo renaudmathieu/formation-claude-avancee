@@ -38,7 +38,7 @@ RETRYABLE = (
 
 
 def build_request(
-    messages, *, system=None, tools=None, tool_choice=None, effort="low", model=None
+    messages, *, system=None, tools=None, tool_choice=None, effort="low", model=None, schema=None
 ) -> dict:
     """Build the parameters shared by `send` and `stream`."""
     request = {
@@ -50,6 +50,9 @@ def build_request(
         "fallbacks": "default",
         "betas": [FALLBACK_BETA],
     }
+    if schema:
+        # Structured outputs: the answer is guaranteed to follow this JSON schema.
+        request["output_config"]["format"] = {"type": "json_schema", "schema": schema}
     if system:
         request["system"] = system
     if tools:
@@ -59,7 +62,17 @@ def build_request(
     return request
 
 
-def send(client, messages, *, system=None, tools=None, tool_choice=None, effort="low", model=None):
+def send(
+    client,
+    messages,
+    *,
+    system=None,
+    tools=None,
+    tool_choice=None,
+    effort="low",
+    model=None,
+    schema=None,
+):
     """Send the conversation to Claude and return the response.
 
     The API is stateless: `messages` must hold the whole conversation.
@@ -72,6 +85,7 @@ def send(client, messages, *, system=None, tools=None, tool_choice=None, effort=
         tool_choice=tool_choice,
         effort=effort,
         model=model,
+        schema=schema,
     )
     return client.beta.messages.create(**request)
 
