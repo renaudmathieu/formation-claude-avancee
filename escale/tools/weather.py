@@ -1,23 +1,26 @@
 """Weather forecast helper, based on the Open-Meteo API (no API key required)."""
 
+import json
 import os
 from datetime import date, timedelta
 
 import httpx
+
+from escale.toolbox import Tool, ToolError
 
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 TIMEOUT_SECONDS = 10
 
 
-class WeatherError(Exception):
+class WeatherError(ToolError):
     """The forecast could not be obtained."""
 
 
 def pick_day(daily: dict, target: date) -> dict:
     """Return the forecast of `target` from an Open-Meteo `daily` block."""
     first_day = date.fromisoformat(daily["time"][0])
-    index = (target - first_day).days + 1
+    index = (target - first_day).days
     if not 0 <= index < len(daily["time"]):
         raise WeatherError(f"Pas de prévision disponible pour le {target.isoformat()}.")
     return {
@@ -77,3 +80,38 @@ def get_forecast(city: str, target: date) -> dict:
     is_simulated = os.environ.get("ESCALE_METEO") == "simule"
     daily = simulated_daily(date.today()) if is_simulated else fetch_daily(city)
     return {"city": city, "is_simulated": is_simulated, **pick_day(daily, target)}
+
+
+WEATHER_TOOL = {
+    "name": "get_weather",
+    "description": (
+        "Donne la prévision météo d'une ville pour un jour précis (température minimale et "
+        "maximale, probabilité de pluie). Disponible d'aujourd'hui à dans 6 jours. Utilise cet "
+        "outil dès que la réponse dépend de la météo : tu ne connais pas la météo par toi-même. "
+        "Si le résultat indique is_simulated à true, précise que ces données sont simulées."
+    ),
+    "strict": True,
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "city": {"type": "string", "description": "Nom de la ville, par exemple Lyon."},
+            "date": {"type": "string", "description": "Jour demandé, au format AAAA-MM-JJ."},
+        },
+        "required": ["city", "date"],
+        "additionalProperties": False,
+    },
+}
+
+
+def run_weather_tool(tool_input: dict) -> str:
+    """Execute a `get_weather` call and return its result as JSON text."""
+    try:
+        target = date.fromisoformat(tool_input["date"])
+    except ValueError as error:
+        raise WeatherError(f"Date invalide : {tool_input['date']}") from error
+    return json.dumps(get_forecast(tool_input["city"], target), ensure_ascii=False)
+
+
+def weather_tool() -> Tool:
+    """Build the weather tool."""
+    return Tool(definition=WEATHER_TOOL, handler=run_weather_tool)
